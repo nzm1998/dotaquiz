@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dota2 工具站</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Oxanium:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <a href="#" class="nav-logo" onclick="navigate('home'); return false;">
+      <div class="nav-logo-mark">D2</div>
+      <span class="nav-logo-text">Dota2 工具站</span>
+    </a>
+    <div class="nav-links">
+      <span class="nav-link" onclick="navigate('quiz')" id="nav-quiz">答题</span>
+      <span class="nav-link" onclick="navigate('bp')" id="nav-bp">BP建议</span>
+    </div>
+    <div class="nav-cta"></div>
+  </nav>
+
+  <!-- HOME SCREEN -->
+  <div id="home-screen">
+    <section class="hero">
+      <div class="hero-mesh"></div>
+      <div class="hero-content">
+        <div class="hero-badge animate-in">
+          <span class="hero-badge-dot"></span>
+          <span>Dota2 工具集合</span>
+        </div>
+        <h1 class="hero-title animate-in delay-1">
+          Dota2 <span>双模块工具站</span>
+        </h1>
+        <p class="hero-subtitle animate-in delay-2">
+          趣味答题测试你的刀塔知识，BP建议助你打出最优阵容。两个工具，一个入口。
+        </p>
+      </div>
+    </section>
+
+    <section class="hero" style="padding-top: var(--space-3xl); background: var(--canvas-soft);">
+      <div class="hero-content">
+        <div class="modules-grid animate-in delay-3">
+          <div class="module-card" onclick="navigate('quiz')">
+            <div class="module-card-header">
+              <div class="module-icon-wrap">📝</div>
+              <span class="module-badge">趣味</span>
+            </div>
+            <h3 class="module-name">答题挑战</h3>
+            <p class="module-desc">从新手到老玩家，五道题测出你的刀塔知识水平。支持所有英雄、道具和游戏机制。</p>
+            <div class="module-meta">
+              <div class="module-meta-item"><span>📝</span><span>5 题</span></div>
+              <div class="module-meta-item"><span>🏆</span><span>称号系统</span></div>
+            </div>
+            <div class="module-card-arrow">→</div>
+          </div>
+
+          <div class="module-card" onclick="navigate('bp')">
+            <div class="module-card-header">
+              <div class="module-icon-wrap">⚔️</div>
+              <span class="module-badge">战术</span>
+            </div>
+            <h3 class="module-name">BP建议</h3>
+            <p class="module-desc">基于英雄克制与配合关系计算最优阵容。输入我方和敌方阵容，获取最佳推荐英雄。</p>
+            <div class="module-meta">
+              <div class="module-meta-item"><span>🎯</span><span>智能推荐</span></div>
+              <div class="module-meta-item"><span>📊</span><span>胜率数据</span></div>
+            </div>
+            <div class="module-card-arrow">→</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="footer-logo-mark">D2</div>
+          <span class="footer-text">© 2025 Dota2 Tools. 非官方项目，仅供娱乐。</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="quiz-screen"></div>
+
+  <!-- BP SCREEN -->
+  <div id="bp-screen">
+    <div class="bp-container">
+      <header class="bp-header">
+        <h1 class="bp-header-title">⚔️ Dota2 BP 建议工具</h1>
+        <p class="bp-header-subtitle">基于英雄克制与配合关系计算最优阵容</p>
+      </header>
+
+      <div class="lineup-card">
+        <div class="lineup-label my-team"><span>🟢</span> 我方阵容</div>
+        <div class="positions-row" id="myTeam"></div>
+      </div>
+
+      <div class="lineup-card">
+        <div class="lineup-label enemy-team"><span>🔴</span> 敌方阵容</div>
+        <div class="positions-row" id="enemyTeam"></div>
+      </div>
+
+      <div class="filter-section">
+        <span class="filter-label">我的位置（可选）：</span>
+        <select class="position-filter" id="myPosition">
+          <option value="">全部位置</option>
+          <option value="1">1号位（大哥）</option>
+          <option value="2">2号位（中单）</option>
+          <option value="3">3号位（劣单）</option>
+          <option value="4">4号位（游走）</option>
+          <option value="5">5号位（酱油）</option>
+        </select>
+      </div>
+
+      <button class="calculate-btn" id="calculateBtn" onclick="calculateBP()">
+        <span>⚔️</span> 开始给出 BP 建议
+      </button>
+
+      <div class="results-card" id="resultsCard">
+        <div class="results-title">🏆 推荐英雄</div>
+        <div id="resultsContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Controls -->
+  <div class="audio-controls">
+    <button class="audio-btn" id="soundBtn" title="音效开关">🔊</button>
+    <button class="audio-btn" id="bgmBtn" title="BGM开关">🔊</button>
+  </div>
+
+  <script src="bp_agent.js"></script>
+  <script src="scripts/app.js"></script>
+  <script src="scripts/quiz.js" defer></script>
+  <script src="scripts/bp.js" defer></script>
+</body>
+</html>

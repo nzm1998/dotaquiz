@@ -1,0 +1,23 @@
+{
+  "name": "nzmdota2project",
+  "version": "1.0.0",
+  "description": "#### 介绍 dota2趣味问题测试",
+  "main": "firebase-config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nzm1998/dotaquiz.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nzm1998/dotaquiz/issues"
+  },
+  "homepage": "https://github.com/nzm1998/dotaquiz#readme",
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}
