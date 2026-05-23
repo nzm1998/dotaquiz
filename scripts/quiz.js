@@ -111,6 +111,18 @@ function shuffleArray(arr) {
   return a;
 }
 
+// 打乱选项但保留答案信息
+function shuffleArrayWithAnswer(options, correctIndex) {
+  const indexed = options.map((text, i) => ({ text, isCorrect: i === correctIndex }));
+  const shuffled = shuffleArray(indexed);
+  return shuffled;
+}
+
+// 获取打乱后的正确选项索引
+function getShuffledCorrectIndex(shuffledOptions) {
+  return shuffledOptions.findIndex(opt => opt.isCorrect);
+}
+
 function getAnsweredQuestions() {
   const data = sessionStorage.getItem('answered_questions');
   return data ? JSON.parse(data) : [];
@@ -134,8 +146,56 @@ function getNextBatchQuestions(allQs, difficulty, count = QUESTIONS_PER_ROUND) {
 }
 
 async function initQuiz() {
+  const app = document.getElementById('quiz-screen');
+  app.innerHTML = `
+    <div class="quiz-loading">
+      <div class="quiz-loading-spinner"></div>
+      <div class="quiz-loading-text">加载中...</div>
+    </div>
+  `;
+
+  // 题目必须加载完才显示，但正确率缓存可以后台加载
   await loadQuestions();
-  loadAccuracyCache();
+  // 正确率缓存后台加载，不阻塞UI
+  loadAccuracyCache().catch(() => {});
+
+  if (allQuestions.length > 0) {
+    showDifficultySelection();
+  }
+}
+
+function showDifficultySelection() {
+  const app = document.getElementById('quiz-screen');
+  app.innerHTML = `
+    <div class="quiz-screen">
+      <div class="quiz-landing">
+        <div class="landing-badge animate-in">
+          <span class="landing-badge-dot"></span>
+          <span>答题挑战</span>
+        </div>
+        <h1 class="landing-title animate-in delay-1">
+          选择你的 <span>难度</span>
+        </h1>
+        <p class="landing-subtitle animate-in delay-2">
+          测试你的刀塔知识，看看你是真玩家还是云玩家
+        </p>
+        <div class="difficulty-cards animate-in delay-3">
+          <div class="difficulty-card" onclick="selectDifficulty('beginner')">
+            <div class="difficulty-icon">🌱</div>
+            <h3 class="difficulty-name">初学者</h3>
+            <p class="difficulty-desc">每轮5题，适合新手玩家热身</p>
+            <div class="difficulty-cta">开始挑战 →</div>
+          </div>
+          <div class="difficulty-card veteran" onclick="selectDifficulty('veteran')">
+            <div class="difficulty-icon">⚔️</div>
+            <h3 class="difficulty-name">老刀斯林</h3>
+            <p class="difficulty-desc">每轮5题，高难度题目比例更高</p>
+            <div class="difficulty-cta">开始挑战 →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function selectDifficulty(difficulty) {
@@ -168,10 +228,14 @@ function renderQuestion() {
   const q = questions[currentIndex];
   const difficultyName = DIFFICULTIES[currentDifficulty].name;
 
-  const optionsHtml = q.options.map((opt, i) => `
-    <div class="option" data-index="${i}">
-      <span class="option-indicator">${OPTION_LETTERS[i]}</span>
-      <span class="option-text">${opt}</span>
+  // 打乱选项和字母
+  const shuffledOptions = shuffleArrayWithAnswer(q.options, q._answer);
+  const shuffledOptionLetters = shuffleArray([...OPTION_LETTERS]);
+
+  const optionsHtml = shuffledOptions.map((opt, i) => `
+    <div class="option" data-index="${i}" ${opt.isCorrect ? 'data-correct="true"' : ''}>
+      <span class="option-indicator">${shuffledOptionLetters[i]}</span>
+      <span class="option-text">${opt.text}</span>
     </div>
   `).join('');
 
@@ -232,7 +296,8 @@ function renderQuestion() {
 
 function restoreAnsweredState(q, answerData) {
   const options = document.querySelectorAll('.option');
-  const correctIdx = q._answer;
+  const correctOption = document.querySelector('.option[data-correct="true"]');
+  const correctIdx = correctOption ? parseInt(correctOption.dataset.index) : -1;
   const { selectedIndex, isCorrect } = answerData;
 
   options.forEach((opt, i) => {
@@ -266,7 +331,8 @@ async function handleAnswer(selectedIndex) {
 
   const q = questions[currentIndex];
   const options = document.querySelectorAll('.option');
-  const correctIdx = q._answer;
+  const correctOption = document.querySelector('.option[data-correct="true"]');
+  const correctIdx = correctOption ? parseInt(correctOption.dataset.index) : -1;
   const isCorrect = selectedIndex === correctIdx;
 
   window.playCorrectSound && window.playCorrectSound();

@@ -21,6 +21,10 @@ async function initBP() {
   calculateBtn.disabled = true;
   calculateBtn.textContent = '加载中...';
 
+  // 先立即显示UI骨架，避免白屏
+  renderBPSelectsSkeleton();
+
+  // 后台加载英雄数据
   const loaded = await BP.loadHeroes();
   if (!loaded) {
     document.getElementById('resultsContent').innerHTML = '<div class="error">加载英雄数据失败，请刷新页面重试</div>';
@@ -32,6 +36,21 @@ async function initBP() {
   renderBPSelects();
   calculateBtn.disabled = false;
   calculateBtn.innerHTML = '<span>⚔️</span> 开始给出 BP 建议';
+}
+
+function renderBPSelectsSkeleton() {
+  const createSlot = (position, isEnemy) => `
+    <div class="position-slot">
+      <span class="position-label">${position}号位</span>
+      <div class="hero-dropdown" data-team="${isEnemy ? 'enemy' : 'my'}" data-position="${position}">
+        <div class="hero-skeleton-input"></div>
+      </div>
+    </div>
+  `;
+
+  const positions = [1, 2, 3, 4, 5];
+  document.getElementById('myTeam').innerHTML = positions.map(p => createSlot(p, false)).join('');
+  document.getElementById('enemyTeam').innerHTML = positions.map(p => createSlot(p, true)).join('');
 }
 
 function renderBPSelects() {

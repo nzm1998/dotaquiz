@@ -38,6 +38,8 @@ document.addEventListener('click', () => {
 }, { once: true });
 
 // Routing
+let quizInitialized = false;
+
 function navigate(route) {
   window.location.hash = route;
 }
@@ -59,7 +61,8 @@ function handleRoute() {
   if (hash === 'quiz') {
     quizScreen.style.display = 'block';
     navQuiz.classList.add('active');
-    if (quizScreen.innerHTML === '') {
+    if (!quizInitialized) {
+      quizInitialized = true;
       window.initQuiz && window.initQuiz();
     }
   } else if (hash === 'bp') {
