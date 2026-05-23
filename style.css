@@ -1685,22 +1685,266 @@ body::before {
 
 /* Responsive */
 @media (max-width: 768px) {
+  /* Nav */
   .nav-links { display: none; }
-  .hero {
-    padding-top: calc(64px + var(--space-4xl));
-    padding-bottom: var(--space-4xl);
+  .nav {
+    padding: 0 var(--space-md);
   }
+
+  /* Hero & Home */
+  .hero {
+    padding: calc(64px + var(--space-3xl)) var(--space-md) var(--space-3xl);
+  }
+  .hero-title {
+    font-size: clamp(32px, 10vw, 56px);
+  }
+  .hero-subtitle {
+    font-size: 14px;
+    padding: 0 var(--space-sm);
+  }
+  .modules-grid {
+    grid-template-columns: 1fr;
+    padding: 0 var(--space-sm);
+  }
+  .module-card {
+    padding: var(--space-xl);
+  }
+  .module-icon-wrap {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+  }
+  .module-name {
+    font-size: 18px;
+  }
+  .module-desc {
+    font-size: 13px;
+  }
+
+  /* Difficulty Selection */
+  .difficulty-cards {
+    grid-template-columns: 1fr;
+    max-width: 320px;
+    gap: var(--space-md);
+  }
+  .difficulty-card {
+    padding: var(--space-xl);
+  }
+  .difficulty-icon {
+    font-size: 40px;
+  }
+  .difficulty-name {
+    font-size: 20px;
+  }
+
+  /* Quiz */
+  .quiz-screen,
+  .result-screen {
+    padding: calc(64px + var(--space-md)) var(--space-sm) var(--space-md);
+  }
+  .quiz-container {
+    max-width: 100%;
+  }
+  .quiz-card-body {
+    padding: var(--space-md);
+  }
+  .quiz-question-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .option {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 12px;
+  }
+  .option-indicator {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+  .option-text {
+    font-size: 14px;
+  }
+  .feedback {
+    padding: var(--space-md);
+    border-radius: 12px;
+  }
+  .feedback-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  .feedback-title {
+    font-size: 16px;
+  }
+  .next-btn {
+    padding: var(--space-sm) var(--space-md);
+    font-size: 14px;
+    border-radius: 12px;
+  }
+
+  /* Result */
+  .result-card {
+    padding: var(--space-xl);
+    border-radius: 20px;
+  }
+  .result-badge {
+    width: 80px;
+    height: 80px;
+    font-size: 40px;
+  }
+  .result-title {
+    font-size: 28px;
+  }
+  .result-score {
+    font-size: 56px;
+  }
+  .result-score span {
+    font-size: 32px;
+  }
+  .result-btn-primary,
+  .result-btn-secondary {
+    padding: var(--space-sm) var(--space-lg);
+    font-size: 14px;
+    border-radius: 12px;
+  }
+  .result-quote {
+    font-size: 14px;
+  }
+
+  /* Comments */
+  .comment-input {
+    font-size: 14px;
+    padding: var(--space-sm);
+  }
+  .comment-submit {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  /* BP Module */
+  .bp-container {
+    padding: 0 var(--space-sm);
+  }
+  .bp-header-title {
+    font-size: clamp(24px, 8vw, 36px);
+  }
+  .bp-header-subtitle {
+    font-size: 14px;
+  }
+  .lineup-card {
+    padding: var(--space-md);
+    border-radius: 16px;
+    margin-bottom: var(--space-md);
+  }
+  .positions-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-xs);
+  }
+  .position-label {
+    font-size: 10px;
+  }
+  .hero-dropdown-input {
+    font-size: 13px;
+    padding: var(--space-xxs) var(--space-sm);
+  }
+  .filter-section {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .position-filter {
+    width: 100%;
+    padding: var(--space-sm);
+    font-size: 13px;
+  }
+  .calculate-btn {
+    padding: var(--space-sm) var(--space-md);
+    font-size: 14px;
+    border-radius: 12px;
+  }
+  .results-card {
+    padding: var(--space-md);
+    border-radius: 16px;
+  }
+  .recommendation {
+    padding: var(--space-sm);
+    flex-wrap: wrap;
+  }
+  .rec-avatar {
+    width: 36px;
+    height: 36px;
+  }
+  .rec-position {
+    font-size: 10px;
+    min-width: 60px;
+  }
+  .rec-name {
+    font-size: 13px;
+    min-width: 60px;
+  }
+  .rec-scores {
+    width: 100%;
+    margin-top: var(--space-xs);
+  }
+  .bp-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: var(--space-xs);
+  }
+  .bp-tab {
+    white-space: nowrap;
+    font-size: 11px;
+    padding: var(--space-xxs) var(--space-sm);
+  }
+
+  /* Footer */
   .footer-inner {
     flex-direction: column;
     text-align: center;
   }
-  .quiz-screen,
-  .result-screen {
-    padding: calc(64px + var(--space-lg)) var(--space-md) var(--space-lg);
+
+  /* Audio Controls */
+  .audio-controls {
+    bottom: var(--space-md);
+    right: var(--space-md);
+    gap: var(--space-xxs);
   }
-  .quiz-card-body { padding: var(--space-lg); }
-  .result-card { padding: var(--space-xl); }
-  .result-score { font-size: 56px; }
+  .audio-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 380px) {
+  .landing-title {
+    font-size: 28px;
+  }
+  .difficulty-cards {
+    max-width: 280px;
+  }
+  .quiz-question-text {
+    font-size: 14px;
+  }
+  .option {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  .option-indicator {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+  .option-text {
+    font-size: 13px;
+  }
+  .result-badge {
+    width: 70px;
+    height: 70px;
+    font-size: 32px;
+  }
+  .result-score {
+    font-size: 48px;
+  }
 }
 
 /* Animations */

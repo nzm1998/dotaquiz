@@ -103,7 +103,9 @@ async function playCorrectSound() {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Audio play error:', e.message);
+  }
 }
 
 async function playWrongSound() {
@@ -120,7 +122,9 @@ async function playWrongSound() {
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Audio play error:', e.message);
+  }
 }
 
 // Firebase (shared)

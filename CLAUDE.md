@@ -8,7 +8,7 @@ Dota2 趣味答题 + BP建议 双模块工具网站，位于 `~/Desktop/nzmdota2
 
 ## 架构说明
 
-### 当前架构（2026-05-22 重构）
+### 文件结构
 
 ```
 nzmdota2project_v2/
@@ -18,7 +18,7 @@ nzmdota2project_v2/
 │   ├── quiz.js         # 答题模块
 │   └── bp.js           # BP建议模块
 ├── bp_agent.js         # BP算法核心（位置感知加权计算）
-├── questions.json      # 题库（20道题）
+├── questions.json      # 题库
 ├── heroes_knowledge.json  # 英雄知识数据
 ├── firebase-config.js # Firebase配置
 └── style.css          # 全局样式
@@ -30,19 +30,9 @@ nzmdota2project_v2/
 - `#quiz` - 答题模块
 - `#bp` - BP建议模块
 
-### 答题流程
-
-1. 加载动画 → 难度选择页 → 答题页 → 单题结果页 → 最终结果页
-
-### BP建议流程
-
-1. 输入我方/敌方阵容（5个位置）
-2. 可选：选择我的位置
-3. 点击计算 → 显示4个Tab的推荐英雄
-
 ---
 
-## 答题模块详情
+## 答题模块
 
 ### 难度系统
 
@@ -53,53 +43,41 @@ nzmdota2project_v2/
 
 ### 称号系统
 
-| 正确率 | 称号 | 点评 |
-|--------|------|------|
-| >= 90% | 👑 老刀斯林 | 真正的刀塔传奇！ |
-| 80-89% | 🔥 真刀斯林 | 经验丰富的老玩家！ |
-| 60-79% | 🛡️ 刀斯林 | 不错的刀斯林！ |
-| 40-59% | 🤔 假刀斯林 | 云玩家实锤了！ |
-| 20-39% | ☁️ 云玩家 | 你真的打过刀塔吗？ |
-| < 20% | 💀 云玩家本云 | 你怕不是只看过视频吧？ |
-
-### 正确率统计
-
-- 使用 Firebase Firestore 存储
-- Collection: `question_stats` - 每题独立文档
-- 字段: `correct` (答对次数), `total` (总回答次数)
-
-### 评论区
-
-- Firebase Firestore real-time listeners
-- 每题独立 collection: `comments/{questionId}/items`
-- 最多显示20条，按时间倒序
+| 正确率 | 称号 |
+|--------|------|
+| >= 90% | 👑 老刀斯林 |
+| 80-89% | 🔥 真刀斯林 |
+| 60-79% | 🛡️ 刀斯林 |
+| 40-59% | 🤔 假刀斯林 |
+| 20-39% | ☁️ 云玩家 |
+| < 20% | 💀 云玩家本云 |
 
 ---
 
-## BP模块详情
+## BP模块
 
 ### 位置感知加权计算
 
 ```javascript
 WEIGHTS: {
-  baseWinRate: 5,        // 基础胜率 × 5
-  baseCounter: 1.0,      // 克制系数
-  baseSynergy: 1.0,      // 配合系数
+  baseWinRate: 5,
+  baseCounter: 1.0,
+  baseSynergy: 1.0,
 },
 
 COUNTER_MULTIPLIERS: {
-  1: { 3: 1.5, 4: 1.5 },   // 1号位：防敌方3、4号位
-  2: { 2: 2.0 },             // 中单：中单克制最重要
-  3: { 5: 1.8 },             // 3号位：敌方5号位走一路
-  4: { 3: 1.5 },             // 4号位：敌方3号位走一路
-  5: { 1: 1.5 },             // 5号位：敌方1号位走一路
+  1: { 3: 1.5, 4: 1.5 },
+  2: { 2: 2.0 },
+  3: { 5: 1.8 },
+  4: { 3: 1.5 },
+  5: { 1: 1.5 },
 },
 
 SYNERGY_MULTIPLIERS: {
-  1: { 5: 1.8 },   // 1号位与5号位走一路
-  5: { 1: 1.8 },   // 5号位与1号位走一路
-  3: { 4: 1.8 },   // 3号位与4号位走一路
-  4: { 3: 1.8 },   // 4号位与3号位走一路
+  1: { 5: 1.8 },
+  5: { 1: 1.8 },
+  3: { 4: 1.8 },
+  4: { 3: 1.8 },
 },
 ```
 
@@ -114,31 +92,29 @@ SYNERGY_MULTIPLIERS: {
 
 ---
 
-## Firebase 说明
+## 技术细节
 
-### 访问限制
-- **中国大陆**：需要代理（端口7897）才能访问 Firebase Firestore
-- **海外用户**：Firebase 正常访问
+### 安全措施
 
-### 功能依赖
+- 所有 innerHTML 动态内容使用 `escapeHtml()` 转义
+- 评论提交时转义用户输入
 
-| 功能 | 依赖 Firebase | 其他用户能否正常使用 |
-|------|--------------|---------------------|
-| 题目加载 | ❌ | ✅ 都能用 |
-| 答题流程 | ❌ | ✅ 都能用 |
-| 正确率统计 | ✅ | ⚠️ 无数据（首次作答前） |
-| 评论区 | ✅ | ⚠️ 评论加载失败 |
+### Firestore 超时处理
 
-### Firestore 数据结构
+- 超时时间：10 秒
+- `accuracyLoadFailed` 5 分钟后自动重置
+- 网络恢复后可正常重试
 
-```javascript
-// question_stats collection
-doc(id: "1") = { correct: 5, total: 10 }
+### Firebase 说明
 
-// comments collection
-doc(id: "q1") → subcollection "items"
-  doc() = { text: "评论内容", author: "匿名", timestamp: serverTimestamp }
-```
+- 中国大陆需要代理（端口7897）才能访问
+- 答题功能不依赖 Firebase，可独立工作
+- 正确率统计和评论区需要 Firebase
+
+### 移动端适配
+
+- 375px / 768px / 1280px 断点
+- BP 模块英雄位置网格自适应
 
 ---
 
@@ -147,27 +123,28 @@ doc(id: "q1") → subcollection "items"
 ### 颜色（深色电竞主题）
 
 ```css
---canvas: #0a0a12;        /* 深色背景 */
---accent-red: #e94560;     /* Dota2红 */
---accent-gold: #f0a500;   /* 金色 */
---success: #00d4aa;        /* 正确绿 */
---error: #ff4757;          /* 错误红 */
+--canvas: #0a0a12;
+--accent-red: #e94560;
+--accent-gold: #f0a500;
+--success: #00d4aa;
+--error: #ff4757;
 ```
 
 ### 动效
 
-- 缓动曲线: `cubic-bezier(0.16, 1, 0.3, 1)`
-- 动画: `fadeInUp` 0.5-0.6s
-- 悬停: `translateY(-8px) scale(1.02)` + glow shadows
+- `cubic-bezier(0.16, 1, 0.3, 1)`
+- `fadeInUp` 0.5-0.6s
 
 ---
 
 ## 文件变更记录
 
-| 日期 | 文件 | 变更 |
-|------|------|------|
-| 2026-05-23 | style.css | 深色电竞主题重构 |
-| 2026-05-23 | scripts/quiz.js | 加载动画 + 选项随机打乱 |
-| 2026-05-23 | scripts/bp.js | 骨架屏加载 |
-| 2026-05-23 | scripts/app.js | 路由初始化优化 |
-| 2026-05-22 | bp_agent.js | 新增位置感知加权计算 |
+| 日期 | 变更 |
+|------|------|
+| 2026-05-23 | XSS 修复（escapeHtml） |
+| 2026-05-23 | Firestore 超时优化（10s + 自动重置） |
+| 2026-05-23 | Empty catch 改为 console.warn |
+| 2026-05-23 | 移动端适配完善 |
+| 2026-05-23 | 选项顺序固定为 ABCD |
+| 2026-05-22 | 深色电竞主题重构 |
+| 2026-05-22 | 位置感知加权计算 |

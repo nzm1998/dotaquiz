@@ -3,7 +3,7 @@ let bpInitialized = false;
 let bpHeroes = [];
 let myLineup = ['', '', '', '', ''];
 let enemyLineup = ['', '', '', '', ''];
-let currentBPTab = 'recommended'; // recommended, notRecommended, enemyRecommended, enemyNotRecommended
+let currentBPTab = 'recommended';
 
 // Tab configuration
 const BP_TABS = [
@@ -12,6 +12,13 @@ const BP_TABS = [
   { id: 'enemyRecommended', label: '🔵 敌方预测', color: '#3b82f6' },
   { id: 'enemyNotRecommended', label: '⚫ 敌方规避', color: '#6b7280' }
 ];
+
+// XSS protection
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 async function initBP() {
   if (bpInitialized) return;
@@ -128,9 +135,9 @@ function filterBPDropdown(dropdown, query) {
         <div class="hero-dropdown-item ${isDisabled ? 'disabled' : ''}"
              data-hero-id="${hero.id}"
              ${isDisabled ? '' : 'onclick="selectBPHero(this)"'}>
-          <img class="hero-dropdown-item-avatar" src="${avatarUrl}" alt="${hero.name}" onerror="this.style.display='none'">
-          <span class="hero-dropdown-item-name">${hero.name}</span>
-          ${hero.alias ? `<span class="hero-dropdown-item-alias">${hero.alias}</span>` : ''}
+          <img class="hero-dropdown-item-avatar" src="${avatarUrl}" alt="${escapeHtml(hero.name)}" onerror="this.style.display='none'">
+          <span class="hero-dropdown-item-name">${escapeHtml(hero.name)}</span>
+          ${hero.alias ? `<span class="hero-dropdown-item-alias">${escapeHtml(hero.alias)}</span>` : ''}
         </div>
       `;
     }).join('');

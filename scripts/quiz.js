@@ -39,6 +39,15 @@ async function loadAccuracyCache() {
   const now = Date.now();
   const lastLoad = sessionStorage.getItem('accuracy_last_load');
 
+  // 每5分钟重置失败状态，允许重试
+  const FAILURE_RESET_DURATION = 5 * 60 * 1000;
+  if (lastLoad && accuracyLoadFailed) {
+    const prevLoad = parseInt(sessionStorage.getItem('accuracy_fail_time') || '0');
+    if (now - prevLoad > FAILURE_RESET_DURATION) {
+      accuracyLoadFailed = false;
+    }
+  }
+
   if (lastLoad && (now - parseInt(lastLoad)) < ACCURACY_CACHE_DURATION && !accuracyLoadFailed) {
     const cached = sessionStorage.getItem('accuracy_cache');
     if (cached) {
@@ -48,8 +57,9 @@ async function loadAccuracyCache() {
   }
 
   try {
+    // 增加超时到10秒
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Firestore timeout')), 5000);
+      setTimeout(() => reject(new Error('Firestore timeout')), 10000);
     });
 
     const snapshot = await Promise.race([statsCollection.get(), timeoutPromise]);
@@ -61,10 +71,12 @@ async function loadAccuracyCache() {
     });
     sessionStorage.setItem('accuracy_cache', JSON.stringify(accuracyCache));
     sessionStorage.setItem('accuracy_last_load', now.toString());
+    accuracyLoadFailed = false;
   } catch (e) {
     console.warn('Failed to load accuracy stats:', e.message);
     accuracyCache = {};
     accuracyLoadFailed = true;
+    sessionStorage.setItem('accuracy_fail_time', now.toString());
   }
 }
 
@@ -109,18 +121,6 @@ function shuffleArray(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
-}
-
-// 打乱选项但保留答案信息
-function shuffleArrayWithAnswer(options, correctIndex) {
-  const indexed = options.map((text, i) => ({ text, isCorrect: i === correctIndex }));
-  const shuffled = shuffleArray(indexed);
-  return shuffled;
-}
-
-// 获取打乱后的正确选项索引
-function getShuffledCorrectIndex(shuffledOptions) {
-  return shuffledOptions.findIndex(opt => opt.isCorrect);
 }
 
 function getAnsweredQuestions() {
@@ -228,14 +228,11 @@ function renderQuestion() {
   const q = questions[currentIndex];
   const difficultyName = DIFFICULTIES[currentDifficulty].name;
 
-  // 打乱选项和字母
-  const shuffledOptions = shuffleArrayWithAnswer(q.options, q._answer);
-  const shuffledOptionLetters = shuffleArray([...OPTION_LETTERS]);
-
-  const optionsHtml = shuffledOptions.map((opt, i) => `
-    <div class="option" data-index="${i}" ${opt.isCorrect ? 'data-correct="true"' : ''}>
-      <span class="option-indicator">${shuffledOptionLetters[i]}</span>
-      <span class="option-text">${opt.text}</span>
+  // 固定ABCD顺序，不用打乱
+  const optionsHtml = q.options.map((opt, i) => `
+    <div class="option" data-index="${i}" data-correct="${i === q._answer}">
+      <span class="option-indicator">${OPTION_LETTERS[i]}</span>
+      <span class="option-text">${escapeHtml(opt)}</span>
     </div>
   `).join('');
 
@@ -256,15 +253,11 @@ function renderQuestion() {
           <div class="quiz-card-body">
             <div class="quiz-question-meta">
               <span class="quiz-type-badge">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
                 题目 ${currentIndex + 1}
               </span>
             </div>
-            <div class="quiz-question-text">${q.question}</div>
+            <div class="quiz-question-text">${escapeHtml(q.question)}</div>
             <div class="options-list">${optionsHtml}</div>
             <div class="feedback" id="feedback">
               <div class="feedback-header">
@@ -434,7 +427,7 @@ function submitComment(questionId) {
   submitBtn.disabled = true;
   const commentsRef = commentsCollection.doc(questionId.toString()).collection('items');
   commentsRef.add({
-    text: text,
+    text: escapeHtml(text),
     author: generateAnonName(),
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   }).then(() => { input.value = ''; })
