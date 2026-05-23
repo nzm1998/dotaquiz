@@ -49,14 +49,18 @@ function handleRoute() {
   const homeScreen = document.getElementById('home-screen');
   const quizScreen = document.getElementById('quiz-screen');
   const bpScreen = document.getElementById('bp-screen');
+  const replayScreen = document.getElementById('replay-screen');
   const navQuiz = document.getElementById('nav-quiz');
   const navBp = document.getElementById('nav-bp');
+  const navReplay = document.getElementById('nav-replay');
 
   homeScreen.style.display = 'none';
   quizScreen.style.display = 'none';
   bpScreen.style.display = 'none';
+  replayScreen.style.display = 'none';
   navQuiz.classList.remove('active');
   navBp.classList.remove('active');
+  navReplay.classList.remove('active');
 
   if (hash === 'quiz') {
     quizScreen.style.display = 'block';
@@ -69,6 +73,10 @@ function handleRoute() {
     bpScreen.style.display = 'block';
     navBp.classList.add('active');
     window.initBP && window.initBP();
+  } else if (hash === 'replay') {
+    replayScreen.style.display = 'block';
+    navReplay.classList.add('active');
+    window.initReplay && window.initReplay();
   } else {
     homeScreen.style.display = 'block';
   }

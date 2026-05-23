@@ -23,6 +23,7 @@
     <div class="nav-links">
       <span class="nav-link" onclick="navigate('quiz')" id="nav-quiz">答题</span>
       <span class="nav-link" onclick="navigate('bp')" id="nav-bp">BP建议</span>
+      <span class="nav-link" onclick="navigate('replay')" id="nav-replay">复盘</span>
     </div>
     <div class="nav-cta"></div>
   </nav>
@@ -72,6 +73,20 @@
             <div class="module-meta">
               <div class="module-meta-item"><span>🎯</span><span>智能推荐</span></div>
               <div class="module-meta-item"><span>📊</span><span>胜率数据</span></div>
+            </div>
+            <div class="module-card-arrow">→</div>
+          </div>
+
+          <div class="module-card" onclick="navigate('replay')">
+            <div class="module-card-header">
+              <div class="module-icon-wrap">🎬</div>
+              <span class="module-badge">AI</span>
+            </div>
+            <h3 class="module-name">录像复盘</h3>
+            <p class="module-desc">输入比赛 ID，AI 生成专业复盘报告。分析阵容、选手行为、团队节奏与胜负因素。</p>
+            <div class="module-meta">
+              <div class="module-meta-item"><span>🤖</span><span>AI 分析</span></div>
+              <div class="module-meta-item"><span>📊</span><span>战术建议</span></div>
             </div>
             <div class="module-card-arrow">→</div>
           </div>
@@ -133,6 +148,9 @@
     </div>
   </div>
 
+  <!-- REPLAY SCREEN -->
+  <div id="replay-screen"></div>
+
   <!-- Audio Controls -->
   <div class="audio-controls">
     <button class="audio-btn" id="soundBtn" title="音效开关">🔊</button>
@@ -140,8 +158,10 @@
   </div>
 
   <script src="bp_agent.js"></script>
+  <script src="replay_agent.js"></script>
   <script src="scripts/app.js"></script>
   <script src="scripts/quiz.js" defer></script>
   <script src="scripts/bp.js" defer></script>
+  <script src="scripts/replay.js" defer></script>
 </body>
 </html>

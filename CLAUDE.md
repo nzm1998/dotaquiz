@@ -16,8 +16,10 @@ nzmdota2project_v2/
 ├── scripts/
 │   ├── app.js          # 共享状态、路由、音频控制
 │   ├── quiz.js         # 答题模块
-│   └── bp.js           # BP建议模块
+│   ├── bp.js           # BP建议模块
+│   └── replay.js       # 复盘模块
 ├── bp_agent.js         # BP算法核心（位置感知加权计算）
+├── replay_agent.js     # AI 复盘分析核心（MiniMax API）
 ├── questions.json      # 题库
 ├── heroes_knowledge.json  # 英雄知识数据
 ├── firebase-config.js # Firebase配置
@@ -29,6 +31,7 @@ nzmdota2project_v2/
 - `#home` - 首页
 - `#quiz` - 答题模块
 - `#bp` - BP建议模块
+- `#replay` - 录像复盘模块
 
 ---
 
@@ -92,6 +95,26 @@ SYNERGY_MULTIPLIERS: {
 
 ---
 
+## 复盘模块
+
+### 功能概述
+输入 Dota2 比赛 ID，通过 OpenDota API 获取数据，调用 MiniMax AI 生成专业复盘报告。
+
+### 分析维度
+- 阵容分析：双方阵容优劣、核心英雄表现、克制关系
+- 选手行为路径：发育轨迹、走位意识、打钱效率
+- 眼位分析：（暂无数据，方案B/C支持）
+- 团队节奏：推进节奏、团战时机、决策质量
+- 胜负因素：导致比赛结果的关键因素
+- 改进建议：给两队各提供2-3条具体建议
+
+### 技术方案
+- 方案A（已上线）：比赛 ID → OpenDota API → MiniMax AI → 报告
+- 方案B（未完成）：+ 本地 .dem 文件解析（node-demparser）
+- 方案C（未完成）：Python + clarity 解析 + Node.js API + MongoDB
+
+---
+
 ## 技术细节
 
 ### 安全措施
@@ -141,6 +164,7 @@ SYNERGY_MULTIPLIERS: {
 
 | 日期 | 变更 |
 |------|------|
+| 2026-05-23 | 新增录像复盘模块（方案A：比赛ID + OpenDota API + MiniMax AI） |
 | 2026-05-23 | XSS 修复（escapeHtml） |
 | 2026-05-23 | Firestore 超时优化（10s + 自动重置） |
 | 2026-05-23 | Empty catch 改为 console.warn |
