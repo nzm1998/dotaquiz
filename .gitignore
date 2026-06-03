@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build / temp
+temp/
+dist/
+build/
+*.log
+
+# Numbers (大文件，懒得 git)
+*.numbers
+counter_matrix.csv
+synergy_matrix.csv
+
+# API keys (本地配置)
+config/api_keys.js
+
+# 环境变量
+.env
+.env.local
+
+# 系统文件
+.DS_Store
+*.swp

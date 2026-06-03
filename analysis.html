@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dota2 战术分析</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+      background: #0d0d14;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+
+    h1 { color: #f0a500; margin-bottom: 5px; font-size: 1.4rem; }
+    .subtitle { color: #666; margin-bottom: 20px; font-size: 0.85rem; }
+
+    /* Summary bar */
+    .summary-bar {
+      display: flex;
+      gap: 30px;
+      padding: 15px 25px;
+      background: #15152a;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .summary-item { text-align: center; }
+    .summary-value { font-size: 1.4rem; font-weight: 700; color: #f0a500; }
+    .summary-label { font-size: 0.7rem; color: #666; text-transform: uppercase; }
+
+    /* Controls row */
+    .controls-row {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .hero-select, .filter-select {
+      background: #15152a;
+      border: 1px solid #333;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      min-width: 150px;
+    }
+    .time-display {
+      background: #15152a;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 1rem;
+      color: #00d4aa;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    /* Main layout: map + side panel */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+    }
+    @media (max-width: 1000px) {
+      .main-layout { grid-template-columns: 1fr; }
+    }
+
+    /* Map container */
+    .map-container {
+      background: #15152a;
+      border-radius: 12px;
+      padding: 15px;
+      position: relative;
+    }
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+    }
+    #mapCanvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      border: 1px solid #252540;
+    }
+
+    /* Time slider */
+    .time-slider-container {
+      margin-top: 15px;
+      padding: 0 5px;
+    }
+    .time-slider {
+      width: 100%;
+      height: 10px;
+      -webkit-appearance: none;
+      background: linear-gradient(to right, #1a1a30, #2a2a50);
+      border-radius: 5px;
+      outline: none;
+      cursor: pointer;
+    }
+    .time-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #f0a500;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(240, 165, 0, 0.6);
+    }
+    .time-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 0.7rem;
+      color: #555;
+    }
+
+    /* Side panel */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    /* Panel section */
+    .panel-section {
+      background: #15152a;
+      border-radius: 10px;
+      padding: 15px;
+    }
+    .panel-title {
+      font-size: 0.85rem;
+      color: #00d4aa;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #252540;
+    }
+
+    /* Ward comparison */
+    .ward-compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .ward-stat {
+      background: #0d0d14;
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .ward-stat.obs { border-left: 3px solid #ffd700; }
+    .ward-stat.sen { border-left: 3px solid #4a9eff; }
+    .ward-stat-value { font-size: 1.3rem; font-weight: 700; }
+    .ward-stat.obs .ward-stat-value { color: #ffd700; }
+    .ward-stat.sen .ward-stat-value { color: #4a9eff; }
+    .ward-stat-label { font-size: 0.65rem; color: #666; }
+
+    /* Filter section */
+    .filter-group {
+      margin-bottom: 12px;
+    }
+    .filter-group:last-child { margin-bottom: 0; }
+    .filter-label {
+      font-size: 0.7rem;
+      color: #666;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .filter-select {
+      width: 100%;
+      min-width: unset;
+      margin-bottom: 8px;
+    }
+
+    /* Ward list */
+    .ward-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .ward-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: #0d0d14;
+      border-radius: 5px;
+      margin-bottom: 4px;
+      font-size: 0.78rem;
+    }
+    .ward-item .hero { font-weight: 600; }
+    .ward-item .count { font-weight: 700; }
+    .ward-item .count.obs { color: #ffd700; }
+    .ward-item .count.sen { color: #4a9eff; }
+    .ward-item .time { color: #555; font-size: 0.7rem; }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: #666;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-icon {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+    .legend-icon.obs { background: #ffd700; }
+    .legend-icon.sen { background: #4a9eff; }
+
+    /* Loading/Error */
+    .loading { text-align: center; padding: 80px; color: #666; font-size: 1.1rem; }
+    .loading::after { content: '...'; animation: dots 1.5s infinite; }
+    @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+    .error { background: #2a1515; border: 1px solid #e94560; border-radius: 8px; padding: 20px; color: #e94560; }
+
+    /* Team badges */
+    .team-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+    }
+    .team-badge.radiant { background: rgba(0, 212, 170, 0.2); color: #00d4aa; }
+    .team-badge.dire { background: rgba(233, 69, 96, 0.2); color: #e94560; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0d0d14; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+    /* Tooltip */
+    .ward-tooltip {
+      position: absolute;
+      background: rgba(13, 13, 20, 0.95);
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+    }
+    .ward-tooltip.visible { display: block; }
+    .ward-tooltip .wt-hero { font-weight: 600; margin-bottom: 4px; }
+    .ward-tooltip .wt-time { color: #666; }
+    .ward-tooltip .wt-type { margin-top: 4px; }
+    .ward-tooltip .wt-type.obs { color: #ffd700; }
+    .ward-tooltip .wt-type.sen { color: #4a9eff; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚔️ Dota2 战术分析</h1>
+    <p class="subtitle" id="matchInfo">加载中...</p>
+
+    <div id="app">
+      <div class="loading">正在加载数据...</div>
+    </div>
+  </div>
+
+  <div class="ward-tooltip" id="wardTooltip">
+    <div class="wt-hero"></div>
+    <div class="wt-time"></div>
+    <div class="wt-type"></div>
+  </div>
+
+  <script type="module">
+    const SERVER = 'http://localhost:3000';
+    const GAME_TICKS_PER_SEC = 30;
+    const MINIMAP_SIZE = 514; // pixels
+    const MAP_WORLD_SIZE = 32000; // -16000 to 16000
+
+    let trajectoryData = null;
+    let spatialData = null;
+    let currentTeamFilter = 'all'; // 'all' | 'radiant' | 'dire'
+    let currentHeroFilter = 'all';
+    let currentObsFilter = true;
+    let currentSenFilter = true;
+    let currentTime = 999999;
+    let durationSec = 0;
+
+    // Team mapping: heroName -> team (radiant/dire)
+    let heroTeamMap = {};
+
+    async function init() {
+      const app = document.getElementById('app');
+
+      try {
+        const stored = sessionStorage.getItem('spatialData');
+        if (stored) {
+          try { trajectoryData = JSON.parse(stored); sessionStorage.removeItem('spatialData'); }
+          catch (e) { console.warn('Failed to parse stored data'); }
+        }
+
+        if (!trajectoryData) {
+          app.innerHTML = '<div class="loading">正在解析录像...</div>';
+          const res = await fetch(`${SERVER}/api/spatial-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filePath: '/Users/nzm/Library/Application Support/Steam/steamapps/common/dota 2 beta/game/dota/replays/8820791846.dem'
+            })
+          });
+          if (!res.ok) throw new Error(`服务器错误: ${res.status}`);
+          trajectoryData = (await res.json()).data;
+        }
+
+        spatialData = trajectoryData.spatialAnalysis || {};
+        durationSec = trajectoryData.duration || 3600;
+
+        // Build hero -> team mapping
+        const matchInfo = trajectoryData.matchInfo || {};
+        const radiant = matchInfo.radiantTeam || [];
+        const dire = matchInfo.direTeam || [];
+        radiant.forEach(h => heroTeamMap[h] = 'radiant');
+        dire.forEach(h => heroTeamMap[h] = 'dire');
+
+        // If no team info, infer from hero stats
+        if (Object.keys(heroTeamMap).length === 0) {
+          const heroStats = spatialData.heroStats || {};
+          const heroes = Object.keys(heroStats);
+          heroes.forEach((h, i) => {
+            heroTeamMap[h] = i < heroes.length / 2 ? 'radiant' : 'dire';
+          });
+        }
+
+        renderUI();
+        renderMap();
+
+      } catch (error) {
+        document.getElementById('app').innerHTML =
+          `<div class="error">加载失败: ${error.message}<br>请确保 server.mjs 正在运行 (node server.mjs)</div>`;
+      }
+    }
+
+    function renderUI() {
+      const app = document.getElementById('app');
+      const wardHm = spatialData.wardHeatmap || {};
+      const matchInfo = trajectoryData.matchInfo || {};
+      const heroes = Object.keys(spatialData.heroStats || {}).filter(k => k && !k.includes('_'));
+
+      document.getElementById('matchInfo').textContent =
+        `比赛 ${matchInfo.matchId || '?'} | ${formatTime(durationSec)} | ${matchInfo.radiantWin ? '天辉' : '夜魇'}胜利`;
+
+      const wardTotal = (wardHm.totalObs || 0) + (wardHm.totalSen || 0);
+
+      // Get all heroes for filter
+      const allHeroes = [...new Set(
+        (trajectoryData.minimapEvents || [])
+          .filter(e => e.hero)
+          .map(e => e.hero)
+      )].filter(Boolean);
+
+      app.innerHTML = `
+        <div class="summary-bar">
+          <div class="summary-item">
+            <div class="summary-value">${formatTime(durationSec)}</div>
+            <div class="summary-label">比赛时长</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${wardHm.totalObs || 0}</div>
+            <div class="summary-label">Observer</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${wardHm.totalSen || 0}</div>
+            <div class="summary-label">Sentry</div>
+          </div>
+        </div>
+
+        <div class="controls-row">
+          <select class="filter-select" id="teamFilter">
+            <option value="all">全部队伍</option>
+            <option value="radiant">天辉</option>
+            <option value="dire">夜魇</option>
+          </select>
+          <select class="filter-select" id="heroFilter" style="min-width:180px">
+            <option value="all">全部选手</option>
+            ${allHeroes.map(h => `<option value="${h}">${h}</option>`).join('')}
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;color:#888;font-size:0.85rem;cursor:pointer">
+            <input type="checkbox" id="obsFilter" checked>
+            <span style="color:#ffd700">●</span> Observer
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;color:#888;font-size:0.85rem;cursor:pointer">
+            <input type="checkbox" id="senFilter" checked>
+            <span style="color:#4a9eff">●</span> Sentry
+          </label>
+          <div class="time-display" id="timeDisplay">全部时间</div>
+        </div>
+
+        <div class="main-layout">
+          <div class="map-container">
+            <div class="canvas-wrapper">
+              <canvas id="mapCanvas" width="${MINIMAP_SIZE}" height="${MINIMAP_SIZE}"></canvas>
+            </div>
+            <div class="time-slider-container">
+              <input type="range" class="time-slider" id="timeSlider" min="0" max="${durationSec}" value="${durationSec}">
+              <div class="time-labels">
+                <span>0:00</span>
+                <span>${formatTime(durationSec * 0.25)}</span>
+                <span>${formatTime(durationSec * 0.5)}</span>
+                <span>${formatTime(durationSec * 0.75)}</span>
+                <span>${formatTime(durationSec)}</span>
+              </div>
+            </div>
+            <div class="legend">
+              <div class="legend-item"><div class="legend-icon obs"></div><span style="color:#ffd700">Observer</span></div>
+              <div class="legend-item"><div class="legend-icon sen"></div><span style="color:#4a9eff">Sentry</span></div>
+            </div>
+          </div>
+
+          <div class="side-panel">
+            <div class="panel-section">
+              <div class="panel-title">👁️ 眼位统计</div>
+              <div class="ward-compare">
+                <div class="ward-stat obs">
+                  <div class="ward-stat-value">${wardHm.totalObs || 0}</div>
+                  <div class="ward-stat-label">Observer</div>
+                </div>
+                <div class="ward-stat sen">
+                  <div class="ward-stat-value">${wardHm.totalSen || 0}</div>
+                  <div class="ward-stat-label">Sentry</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <div class="panel-title">🔍 筛选</div>
+              <div class="filter-group">
+                <span class="filter-label">按队伍</span>
+                <select class="filter-select" id="teamFilterSide">
+                  <option value="all">全部队伍</option>
+                  <option value="radiant">天辉</option>
+                  <option value="dire">夜魇</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <span class="filter-label">按选手</span>
+                <select class="filter-select" id="heroFilterSide" style="min-width:unset">
+                  <option value="all">全部选手</option>
+                  ${allHeroes.map(h => `<option value="${h}">${h}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <div class="panel-title">📋 眼位列表</div>
+              <div class="ward-list" id="wardList"></div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Sync filter changes
+      document.getElementById('teamFilter').addEventListener('change', e => {
+        currentTeamFilter = e.target.value;
+        document.getElementById('teamFilterSide').value = e.target.value;
+        renderMap();
+        renderWardList();
+      });
+      document.getElementById('heroFilter').addEventListener('change', e => {
+        currentHeroFilter = e.target.value;
+        document.getElementById('heroFilterSide').value = e.target.value;
+        renderMap();
+        renderWardList();
+      });
+      document.getElementById('obsFilter').addEventListener('change', e => { currentObsFilter = e.target.checked; renderMap(); renderWardList(); });
+      document.getElementById('senFilter').addEventListener('change', e => { currentSenFilter = e.target.checked; renderMap(); renderWardList(); });
+
+      // Side panel filters sync back
+      document.getElementById('teamFilterSide').addEventListener('change', e => {
+        currentTeamFilter = e.target.value;
+        document.getElementById('teamFilter').value = e.target.value;
+        renderMap();
+        renderWardList();
+      });
+      document.getElementById('heroFilterSide').addEventListener('change', e => {
+        currentHeroFilter = e.target.value;
+        document.getElementById('heroFilter').value = e.target.value;
+        renderMap();
+        renderWardList();
+      });
+
+      document.getElementById('timeSlider').addEventListener('input', e => {
+        currentTime = parseInt(e.target.value);
+        document.getElementById('timeDisplay').textContent =
+          currentTime >= durationSec ? '全部时间' : formatTime(currentTime);
+        renderMap();
+        renderWardList();
+      });
+
+      renderWardList();
+    }
+
+    // ==================== Map Rendering ====================
+
+    function toCanvasX(worldX) {
+      return ((worldX + 16000) / MAP_WORLD_SIZE) * MINIMAP_SIZE;
+    }
+    function toCanvasY(worldY) {
+      return (16000 - worldY) / MAP_WORLD_SIZE * MINIMAP_SIZE;
+    }
+
+    function renderMap() {
+      const canvas = document.getElementById('mapCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      // Draw minimap background
+      const img = new Image();
+      img.src = './Xnip2026-05-25_15-46-28.jpeg';
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+        drawWards(ctx);
+      };
+      // If image fails, draw placeholder
+      img.onerror = () => {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+        drawWards(ctx);
+      };
+    }
+
+    function drawWards(ctx) {
+      const allEvents = trajectoryData.minimapEvents || [];
+      const wards = allEvents.filter(e =>
+        (e.eventType === 64 || e.eventType === 32) &&
+        e.x !== undefined && e.y !== undefined
+      );
+
+      wards.forEach(w => {
+        const wt = (w.tick || 0) / GAME_TICKS_PER_SEC;
+        // Time filter
+        if (currentTime < durationSec && wt > currentTime) return;
+        // Type filter
+        if (w.eventType === 64 && !currentObsFilter) return;
+        if (w.eventType === 32 && !currentSenFilter) return;
+
+        // Team filter
+        const heroTeam = heroTeamMap[w.hero] || 'unknown';
+        if (currentTeamFilter !== 'all' && heroTeam !== currentTeamFilter) return;
+        // Hero filter
+        if (currentHeroFilter !== 'all' && w.hero !== currentHeroFilter) return;
+
+        const worldX = w.x * 8; // minimap coord * 8 = world coord
+        const worldY = w.y * 8;
+        const cx = toCanvasX(worldX);
+        const cy = toCanvasY(worldY);
+        const isObs = w.eventType === 64;
+        const color = isObs ? '#ffd700' : '#4a9eff';
+
+        // Draw ward icon (circle with inner dot)
+        ctx.beginPath();
+        ctx.arc(cx, cy, isObs ? 6 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Inner circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, isObs ? 2.5 : 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+
+        // Store for tooltip lookup
+        w._canvasX = cx;
+        w._canvasY = cy;
+      });
+
+      // Setup tooltip
+      setupTooltip(wards);
+    }
+
+    function setupTooltip(wards) {
+      const canvas = document.getElementById('mapCanvas');
+      const tooltip = document.getElementById('wardTooltip');
+      if (!canvas || !tooltip) return;
+
+      canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = MINIMAP_SIZE / rect.width;
+        const scaleY = MINIMAP_SIZE / rect.height;
+        const mx = (e.clientX - rect.left) * scaleX;
+        const my = (e.clientY - rect.top) * scaleY;
+
+        let found = null;
+        for (const w of wards) {
+          const dx = mx - w._canvasX;
+          const dy = my - w._canvasY;
+          if (Math.sqrt(dx*dx + dy*dy) < 10) {
+            found = w;
+            break;
+          }
+        }
+
+        if (found) {
+          const wt = (found.tick || 0) / GAME_TICKS_PER_SEC;
+          const heroTeam = heroTeamMap[found.hero] || 'unknown';
+          tooltip.innerHTML = `
+            <div class="wt-hero">
+              <span class="team-badge ${heroTeam}">${heroTeam === 'radiant' ? '天辉' : '夜魇'}</span>
+              ${found.hero || '?'}
+            </div>
+            <div class="wt-time">${formatTime(wt)}</div>
+            <div class="wt-type ${found.eventType === 64 ? 'obs' : 'sen'}">
+              ${found.eventType === 64 ? '● Observer' : '● Sentry'}
+            </div>
+          `;
+          tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+          tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+          tooltip.classList.add('visible');
+        } else {
+          tooltip.classList.remove('visible');
+        }
+      });
+
+      canvas.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('visible');
+      });
+    }
+
+    // ==================== Ward List ====================
+
+    function renderWardList() {
+      const container = document.getElementById('wardList');
+      if (!container) return;
+
+      const allEvents = trajectoryData.minimapEvents || [];
+      const wards = allEvents.filter(e =>
+        (e.eventType === 64 || e.eventType === 32) &&
+        e.hero
+      );
+
+      // Filter
+      const filtered = wards.filter(w => {
+        if (currentTime < durationSec && (w.tick || 0) / GAME_TICKS_PER_SEC > currentTime) return false;
+        if (!currentObsFilter && w.eventType === 64) return false;
+        if (!currentSenFilter && w.eventType === 32) return false;
+        if (currentTeamFilter !== 'all') {
+          const heroTeam = heroTeamMap[w.hero] || 'unknown';
+          if (heroTeam !== currentTeamFilter) return false;
+        }
+        if (currentHeroFilter !== 'all' && w.hero !== currentHeroFilter) return false;
+        return true;
+      });
+
+      // Group by hero
+      const byHero = {};
+      filtered.forEach(w => {
+        const hero = w.hero || '?';
+        if (!byHero[hero]) byHero[hero] = { obs: 0, sen: 0, lastTime: 0 };
+        if (w.eventType === 64) byHero[hero].obs++;
+        else byHero[hero].sen++;
+        byHero[hero].lastTime = Math.max(byHero[hero].lastTime, (w.tick || 0) / GAME_TICKS_PER_SEC);
+      });
+
+      const sorted = Object.entries(byHero).sort((a, b) => (b[1].obs + b[1].sen) - (a[1].obs + a[1].sen));
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<div style="font-size:0.75rem;color:#666;text-align:center;padding:20px">无眼位数据</div>';
+        return;
+      }
+
+      container.innerHTML = sorted.map(([hero, data]) => {
+        const heroTeam = heroTeamMap[hero] || 'unknown';
+        return `
+          <div class="ward-item">
+            <div>
+              <span class="team-badge ${heroTeam}">${heroTeam === 'radiant' ? '天' : '夜'}</span>
+              <span class="hero">${hero}</span>
+            </div>
+            <div style="display:flex;gap:10px">
+              ${data.obs > 0 ? `<span class="count obs">${data.obs} obs</span>` : ''}
+              ${data.sen > 0 ? `<span class="count sen">${data.sen} sen</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.round(seconds % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    init();
+  </script>
+</body>
+</html>

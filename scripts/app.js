@@ -50,6 +50,7 @@ function handleRoute() {
   const quizScreen = document.getElementById('quiz-screen');
   const bpScreen = document.getElementById('bp-screen');
   const replayScreen = document.getElementById('replay-screen');
+  const teamScreen = document.getElementById('team-screen');
   const navQuiz = document.getElementById('nav-quiz');
   const navBp = document.getElementById('nav-bp');
   const navReplay = document.getElementById('nav-replay');
@@ -58,6 +59,7 @@ function handleRoute() {
   quizScreen.style.display = 'none';
   bpScreen.style.display = 'none';
   replayScreen.style.display = 'none';
+  teamScreen.style.display = 'none';
   navQuiz.classList.remove('active');
   navBp.classList.remove('active');
   navReplay.classList.remove('active');

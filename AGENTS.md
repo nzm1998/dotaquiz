@@ -1,4 +1,4 @@
-# CLAUDE.md - Dota2 工具站
+# AGENTS.md - Dota2 工具站
 
 ## 项目背景
 
@@ -128,6 +128,28 @@ SYNERGY_MULTIPLIERS: {
 | 🔴 我方慎选 | 不适合我方阵容的英雄 |
 | 🔵 敌方预测 | 敌方可能选择的英雄 |
 | ⚫ 敌方规避 | 敌方可能不会选的英雄 |
+
+### counter_matrix.csv 更新流程
+
+`counter_matrix.csv` 是 BP 克制分的底层矩阵，更新时遵循下列规则：
+
+- 只维护对角线左下三角，不手动填写右上三角。
+- 每一行的第一个字段是当前英雄名，后续只填写它在表头中左侧那些英雄的克制值。
+- 例如 `育母蜘蛛` 在表头中的位置靠近末尾，因此该行只填到 `幽鬼` 为止；右侧的 `远古冰魄`、`宙斯`、`主宰`、`卓尔游侠` 保持空白。
+- 用户提供的数据通常是“当前英雄对阵全英雄克制指数，按数值高到低排序”，录入时必须重新按 CSV 表头顺序重排，不能按用户提供顺序直接粘贴。
+- 英雄名必须使用 `counter_matrix.csv` 表头中的现有中文名，不自行标准化、不改别名。
+- 写入前先确认：
+  1. 当前英雄在表头中的列位置。
+  2. 左侧英雄数量是否等于本行应填写的数值数量。
+  3. 用户数据里若包含当前英雄右侧的对手英雄，这些值本轮不写入，留待对应英雄行更新。
+- 写入后再校验：
+  1. 该行字段数应等于“当前英雄表头位置 + 1”。
+  2. 末尾不应越过对角线，不能把右侧列写进去。
+  3. 抽查最后几个已填写字段，确认它们与表头对应关系正确。
+
+当前已明确确认的例子：
+
+- `育母蜘蛛` 行已按上述规则重写，只填写左下三角，未写入右侧的 `远古冰魄`、`宙斯`、`主宰`、`卓尔游侠`。
 
 ---
 
@@ -311,20 +333,20 @@ function interpolateTrajectories(positionBuffer, positionHistory, targetFps = 10
 
 ### B站视频解析 (bilibili)
 
-`~/.claude/scripts/bilibili.sh`，基于 yt-dlp：
+`~/.Codex/scripts/bilibili.sh`，基于 yt-dlp：
 
 ```bash
-~/.claude/scripts/bilibili.sh info "URL"        # 视频信息
-~/.claude/scripts/bilibili.sh download "URL"     # 下载视频
-~/.claude/scripts/bilibili.sh subtitle "URL"     # 下载字幕
-~/.claude/scripts/bilibili.sh search "关键词"     # 搜索
+~/.Codex/scripts/bilibili.sh info "URL"        # 视频信息
+~/.Codex/scripts/bilibili.sh download "URL"     # 下载视频
+~/.Codex/scripts/bilibili.sh subtitle "URL"     # 下载字幕
+~/.Codex/scripts/bilibili.sh search "关键词"     # 搜索
 ```
 
 ### 视频分析工作流
 
 ```bash
 # 1. 下载 B站视频
-~/.claude/scripts/bilibili.sh download "BV号" /tmp/analysis
+~/.Codex/scripts/bilibili.sh download "BV号" /tmp/analysis
 
 # 2. 提取关键帧（每5秒一帧）
 ffmpeg -i video.mp4 -vf "fps=1/5" frames/frame_%03d.jpg

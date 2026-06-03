@@ -38,10 +38,12 @@ const BP = {
   heroesData: null,
 
   // Score weights (base values before multipliers)
+  // 统一量纲: win_rate 用 (win_rate*100-50)，范围约 -10~+10
+  // counters/synergies 范围约 -20~+20
   WEIGHTS: {
-    baseWinRate: 5,        // win_rate × 5
-    baseCounter: 1.0,      // raw counter score multiplier
-    baseSynergy: 1.0,      // raw synergy score multiplier
+    winRateDeviation: 1.0,    // 胜率偏离权重
+    counter: 0.5,             // 克制权重
+    synergy: 0.5,              // 配合权重
   },
 
   // Position-aware lane matchup emphasis multipliers
@@ -62,6 +64,7 @@ const BP = {
     5: { 1: 1.8 },   // 5号位与1号位走一路
     3: { 4: 1.8 },   // 3号位与4号位走一路
     4: { 3: 1.8 },   // 4号位与3号位走一路
+    2: { 4: 1.5, 5: 1.5 }, // 2号位与4、5号位配合加权
   },
 
   // Load heroes knowledge base with caching
@@ -133,11 +136,13 @@ const BP = {
     const enemyTeam = enemyLineup.filter(id => id && id !== '');
 
     const candidate = this.getHeroById(candidateId);
-    const winRateScore = (candidate?.win_rate || 0) * this.WEIGHTS.baseWinRate;
+    // 胜率偏离：48%→-2, 53%→+3
+    const winRateDeviation = ((candidate?.win_rate || 0.5) * 100 - 50);
 
     const counters = [];
     const synergies = [];
-    let totalStrength = winRateScore;
+    let totalCounterScore = 0;
+    let totalSynergyScore = 0;
 
     // Counter scores against ALL enemy heroes with lane-specific emphasis
     for (const enemyHero of enemyTeam) {
@@ -158,7 +163,7 @@ const BP = {
 
         const enemyName = this.getHeroById(enemyHero)?.name || enemyHero;
         counters.push({ heroId: enemyHero, heroName: enemyName, score: score });
-        totalStrength += score;
+        totalCounterScore += score;
       }
     }
 
@@ -181,51 +186,59 @@ const BP = {
 
         const myHeroName = this.getHeroById(myHero)?.name || myHero;
         synergies.push({ heroId: myHero, heroName: myHeroName, score: score });
-        totalStrength += score;
+        totalSynergyScore += score;
       }
     }
 
+    // 综合评分：应用权重
+    const rawTotal = this.WEIGHTS.winRateDeviation * winRateDeviation
+                   + this.WEIGHTS.counter * totalCounterScore
+                   + this.WEIGHTS.synergy * totalSynergyScore;
+
     return {
-      counters,
-      synergies,
-      winRateScore,
-      totalStrength: Math.round(totalStrength * 100) / 100
+      winRateDeviation,
+      totalCounterScore: Math.round(totalCounterScore * 100) / 100,
+      totalSynergyScore: Math.round(totalSynergyScore * 100) / 100,
+      totalStrength: Math.round(rawTotal * 100) / 100
     };
   },
 
   // Calculate total lineup strength for our team against enemy team
+  // 统一量纲评分：(win_rate*100-50) + counter + synergy，权重 W1=1.0, W2=0.5, W3=0.5
   calculateLineupStrength(myLineup, enemyLineup) {
-    let strength = 0;
-
-    // Filter out empty slots
     const myTeam = myLineup.filter(id => id && id !== '');
     const enemyTeam = enemyLineup.filter(id => id && id !== '');
 
     if (enemyTeam.length === 0) return 0;
 
-    // 0. Win rate score: sum of all our heroes' win rates (×5)
-    for (const myHero of myTeam) {
-      const hero = this.getHeroById(myHero);
-      if (hero?.win_rate) {
-        strength += hero.win_rate * 5;
-      }
-    }
+    // 1. 英雄平均强度（胜率偏离50%的值）
+    const totalWinRateDeviation = myTeam.reduce((sum, id) => {
+      const hero = this.getHeroById(id);
+      return sum + ((hero?.win_rate || 0.5) * 100 - 50);
+    }, 0);
+    const avgWinRateDeviation = totalWinRateDeviation / myTeam.length;
 
-    // 1. Counter score: how our heroes counter enemy heroes
+    // 2. 我方对敌方克制总分
+    let totalCounterScore = 0;
     for (const myHero of myTeam) {
       for (const enemyHero of enemyTeam) {
-        strength += this.getCounterScore(myHero, enemyHero);
+        totalCounterScore += this.getCounterScore(myHero, enemyHero);
       }
     }
 
-    // 2. Synergy score: how our heroes synergize with each other
+    // 3. 我方内部配合总分（两两之间）
+    let totalSynergyScore = 0;
     for (let i = 0; i < myTeam.length; i++) {
       for (let j = i + 1; j < myTeam.length; j++) {
-        strength += this.getSynergyScore(myTeam[i], myTeam[j]);
+        totalSynergyScore += this.getSynergyScore(myTeam[i], myTeam[j]);
       }
     }
 
-    return Math.round(strength * 100) / 100;
+    // 最终评分（归一化到 0-100 方便理解）
+    const rawScore = this.WEIGHTS.winRateDeviation * avgWinRateDeviation
+                   + this.WEIGHTS.counter * totalCounterScore
+                   + this.WEIGHTS.synergy * totalSynergyScore;
+    return Math.round(rawScore * 100) / 100;
   },
 
   // Get recommendations for missing positions
@@ -260,7 +273,7 @@ const BP = {
           name: hero.name,
           position: pos,
           strength: scores.totalStrength,
-          winRateScore: scores.winRateScore,
+          winRateDeviation: scores.winRateDeviation,
           counters: scores.counters,
           synergies: scores.synergies
         };
@@ -304,7 +317,7 @@ const BP = {
           name: hero.name,
           position: pos,
           strength: scores.totalStrength,
-          winRateScore: scores.winRateScore,
+          winRateDeviation: scores.winRateDeviation,
           counters: scores.counters,
           synergies: scores.synergies
         };
@@ -342,7 +355,7 @@ const BP = {
           name: hero.name,
           position: pos,
           strength: scores.totalStrength,
-          winRateScore: scores.winRateScore,
+          winRateDeviation: scores.winRateDeviation,
           counters: scores.counters,
           synergies: scores.synergies
         };
@@ -377,7 +390,7 @@ const BP = {
           name: hero.name,
           position: pos,
           strength: scores.totalStrength,
-          winRateScore: scores.winRateScore,
+          winRateDeviation: scores.winRateDeviation,
           counters: scores.counters,
           synergies: scores.synergies
         };
@@ -398,11 +411,12 @@ const BP = {
     const enemyTeam = enemyLineup.filter(id => id && id !== '');
 
     const candidate = this.getHeroById(candidateId);
-    const winRateScore = (candidate?.win_rate || 0) * this.WEIGHTS.baseWinRate;
+    const winRateDeviation = ((candidate?.win_rate || 0.5) * 100 - 50);
 
     const counters = [];
     const synergies = [];
-    let totalStrength = winRateScore;
+    let totalCounterScore = 0;
+    let totalSynergyScore = 0;
 
     // From enemy's perspective: how my heroes counter the candidate
     // If I counter them, that's NEGATIVE for enemy (enemy should avoid)
@@ -423,7 +437,7 @@ const BP = {
 
         const myHeroName = this.getHeroById(myHero)?.name || myHero;
         counters.push({ heroId: myHero, heroName: myHeroName, score: -score });
-        totalStrength -= score;
+        totalCounterScore -= score;
       }
     }
 
@@ -445,15 +459,20 @@ const BP = {
 
         const enemyHeroName = this.getHeroById(enemyHero)?.name || enemyHero;
         synergies.push({ heroId: enemyHero, heroName: enemyHeroName, score: score });
-        totalStrength += score;
+        totalSynergyScore += score;
       }
     }
 
+    // 综合评分：应用权重
+    const rawTotal = this.WEIGHTS.winRateDeviation * winRateDeviation
+                   + this.WEIGHTS.counter * totalCounterScore
+                   + this.WEIGHTS.synergy * totalSynergyScore;
+
     return {
-      counters,
-      synergies,
-      winRateScore,
-      totalStrength: Math.round(totalStrength * 100) / 100
+      winRateDeviation,
+      totalCounterScore: Math.round(totalCounterScore * 100) / 100,
+      totalSynergyScore: Math.round(totalSynergyScore * 100) / 100,
+      totalStrength: Math.round(rawTotal * 100) / 100
     };
   }
 };

@@ -5,6 +5,26 @@ let myLineup = ['', '', '', '', ''];
 let enemyLineup = ['', '', '', '', ''];
 let currentBPTab = 'recommended';
 
+// Hero ID to Steam CDN image name mapping (for heroes whose image filename differs)
+const HERO_IMG_MAP = {
+  // 特殊文件名映射（CDN文件名与heroId不同）
+  'npc_dota_hero_wraith_king': 'skeleton_king',
+  'npc_dota_hero_timbersaw': 'shredder',
+  // dota_react 路径 heroes（使用不同路径）
+  'npc_dota_hero_dawnbreaker': 'dota_react/dawnbreaker',
+  'npc_dota_hero_kez': 'dota_react/kez',
+  'npc_dota_hero_largo': 'dota_react/largo',
+  'npc_dota_hero_marci': 'dota_react/marci',
+  'npc_dota_hero_muerta': 'dota_react/muerta',
+  'npc_dota_hero_primal_beast': 'dota_react/primal_beast',
+  'npc_dota_hero_ringmaster': 'dota_react/ringmaster',
+  'npc_dota_hero_abyssal_underlord': 'dota_react/abyssal_underlord',
+  'npc_dota_hero_leshrac': 'dota_react/leshrac',
+  'npc_dota_hero_queen_of_pain': 'dota_react/qop',
+  'npc_dota_hero_windranger': 'dota_react/windrunner',
+  'npc_dota_hero_natures_prophet': 'dota_react/furion', // 自然先知用furion
+};
+
 // Tab configuration
 const BP_TABS = [
   { id: 'recommended', label: '🟢 我方推荐', color: '#4ade80' },
@@ -12,6 +32,21 @@ const BP_TABS = [
   { id: 'enemyRecommended', label: '🔵 敌方预测', color: '#3b82f6' },
   { id: 'enemyNotRecommended', label: '⚫ 敌方规避', color: '#6b7280' }
 ];
+
+// Get hero image key (some heroes have different CDN filenames)
+function getHeroImgKey(heroId) {
+  if (HERO_IMG_MAP[heroId]) return HERO_IMG_MAP[heroId];
+  return heroId.replace('npc_dota_hero_', '');
+}
+
+// Get full hero image URL
+function getHeroImgUrl(heroId) {
+  const key = getHeroImgKey(heroId);
+  if (key.startsWith('dota_react/')) {
+    return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/${key}.png`;
+  }
+  return `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${key}_icon.png`;
+}
 
 // XSS protection
 function escapeHtml(text) {
@@ -121,16 +156,27 @@ function filterBPDropdown(dropdown, query) {
   const allSelected = [...myLineup, ...enemyLineup].filter(id => id && id !== '');
   const selectedSet = new Set(allSelected);
 
+  // Build menu items
+  let html = '';
+
+  // Add clear option at top
+  html += `
+    <div class="hero-dropdown-item clear-option"
+         onclick="clearBPSlot(this)">
+      <span class="hero-dropdown-item-name">× 清空此位置</span>
+    </div>
+  `;
+
   if (results.length === 0) {
-    menu.innerHTML = '<div class="hero-dropdown-empty">未找到英雄</div>';
+    menu.innerHTML = html + '<div class="hero-dropdown-empty">未找到英雄</div>';
     return;
   }
 
-  menu.innerHTML = results
+  html += results
     .map(hero => {
       const isDisabled = selectedSet.has(hero.id);
-      const heroKey = hero.id.replace('npc_dota_hero_', '');
-      const avatarUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
+      const heroKey = getHeroImgKey(hero.id);
+      const avatarUrl = getHeroImgUrl(heroId);
       return `
         <div class="hero-dropdown-item ${isDisabled ? 'disabled' : ''}"
              data-hero-id="${hero.id}"
@@ -141,37 +187,41 @@ function filterBPDropdown(dropdown, query) {
         </div>
       `;
     }).join('');
+
+  menu.innerHTML = html;
 }
 
 function handleBPKeydown(e, dropdown) {
   const menu = dropdown.querySelector('.hero-dropdown-menu');
-  const items = menu.querySelectorAll('.hero-dropdown-item:not(.disabled)');
+  const heroItems = menu.querySelectorAll('.hero-dropdown-item:not(.disabled):not(.clear-option)');
   const current = menu.querySelector('.hero-dropdown-item.highlighted');
 
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     if (current) current.classList.remove('highlighted');
-    const next = current ? current.nextElementSibling : items[0];
-    if (next && !next.classList.contains('disabled')) {
+    const next = current ? current.nextElementSibling : heroItems[0];
+    if (next && !next.classList.contains('disabled') && !next.classList.contains('clear-option')) {
       next.classList.add('highlighted');
       next.scrollIntoView({ block: 'nearest' });
     }
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
     if (current) current.classList.remove('highlighted');
-    const prev = current ? current.previousElementSibling : items[items.length - 1];
-    if (prev && !prev.classList.contains('disabled')) {
+    const prev = current ? current.previousElementSibling : heroItems[heroItems.length - 1];
+    if (prev && !prev.classList.contains('disabled') && !prev.classList.contains('clear-option')) {
       prev.classList.add('highlighted');
       prev.scrollIntoView({ block: 'nearest' });
     }
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (current && !current.classList.contains('disabled')) {
+    if (current && current.classList.contains('clear-option')) {
+      clearBPSlot(current);
+    } else if (current && !current.classList.contains('disabled')) {
       selectBPHero(current);
-    } else if (items.length > 0) {
-      items.forEach(i => i.classList.remove('highlighted'));
-      if (!current || current.classList.contains('disabled')) {
-        items[0].classList.add('highlighted');
+    } else if (heroItems.length > 0) {
+      heroItems.forEach(i => i.classList.remove('highlighted'));
+      if (!current || current.classList.contains('disabled') || current.classList.contains('clear-option')) {
+        heroItems[0].classList.add('highlighted');
       }
     }
   } else if (e.key === 'Escape') {
@@ -187,8 +237,8 @@ function selectBPHero(element) {
 
   const hero = bpHeroes.find(h => h.id === heroId);
 
-  const heroKey = heroId.replace('npc_dota_hero_', '');
-  const avatarUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
+  const heroKey = getHeroImgKey(heroId);
+  const avatarUrl = getHeroImgUrl(heroId);
   input.value = hero ? hero.name : '';
   input.dataset.selected = heroId;
   input.style.backgroundImage = `url(${avatarUrl})`;
@@ -206,6 +256,30 @@ function selectBPHero(element) {
     myLineup[posIndex] = heroId;
   } else {
     enemyLineup[posIndex] = heroId;
+  }
+
+  menu.classList.remove('open');
+  updateBPSelectDisables();
+}
+
+function clearBPSlot(element) {
+  const dropdown = element.closest('.hero-dropdown');
+  const input = dropdown.querySelector('.hero-dropdown-input');
+  const menu = dropdown.querySelector('.hero-dropdown-menu');
+  const team = dropdown.dataset.team;
+  const position = parseInt(dropdown.dataset.position);
+  const posIndex = position - 1;
+
+  input.value = '';
+  input.dataset.selected = '';
+  input.style.backgroundImage = '';
+  input.style.paddingLeft = '';
+  input.classList.remove('has-value');
+
+  if (team === 'my') {
+    myLineup[posIndex] = '';
+  } else {
+    enemyLineup[posIndex] = '';
   }
 
   menu.classList.remove('open');
@@ -310,25 +384,22 @@ function renderBPResultsWithTabs(allResults) {
       const positionLabel = positionNames[pos] || `${pos}号位`;
 
       heroes.forEach((rec) => {
-        const heroKey = rec.heroId.replace('npc_dota_hero_', '');
-        const avatarUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
+        const heroKey = getHeroImgKey(rec.heroId);
+        const avatarUrl = getHeroImgUrl(heroId);
 
-        const countersHtml = rec.counters && rec.counters.length > 0
-          ? rec.counters.map(c => {
-              const cls = c.score > 0 ? 'positive' : c.score < 0 ? 'negative' : 'neutral';
-              const sign = c.score >= 0 ? '+' : '';
-              const label = currentBPTab.includes('enemy') ? '我方' : '敌方';
-              return `<div class="score-item ${cls}">对${label} ${c.heroName} ${sign}${c.score.toFixed(2)}</div>`;
-            }).join('')
+        // 克制指数（对敌方阵容的总克制）
+        const counterDisplay = rec.totalCounterScore != null && rec.totalCounterScore !== 0
+          ? `<div class="score-item ${rec.totalCounterScore > 0 ? 'positive' : 'negative'}">对敌方克制 ${rec.totalCounterScore > 0 ? '+' : ''}${rec.totalCounterScore.toFixed(2)}</div>`
           : '';
 
-        const synergiesHtml = rec.synergies && rec.synergies.length > 0
-          ? rec.synergies.map(s => {
-              const cls = s.score > 0 ? 'positive' : s.score < 0 ? 'negative' : 'neutral';
-              const sign = s.score >= 0 ? '+' : '';
-              const label = currentBPTab.includes('enemy') ? '敌方' : '我方';
-              return `<div class="score-item ${cls}">对${label} ${s.heroName} ${sign}${s.score.toFixed(2)}</div>`;
-            }).join('')
+        // 配合指数（对己方阵容的总配合）
+        const synergyDisplay = rec.totalSynergyScore != null && rec.totalSynergyScore !== 0
+          ? `<div class="score-item ${rec.totalSynergyScore > 0 ? 'positive' : 'negative'}">对己方配合 ${rec.totalSynergyScore > 0 ? '+' : ''}${rec.totalSynergyScore.toFixed(2)}</div>`
+          : '';
+
+        // 总分显示
+        const totalDisplay = rec.totalStrength != null
+          ? `<div class="score-item total">总分 ${rec.totalStrength > 0 ? '+' : ''}${rec.totalStrength.toFixed(2)}</div>`
           : '';
 
         html += `
@@ -337,8 +408,9 @@ function renderBPResultsWithTabs(allResults) {
             <span class="rec-position">${positionLabel}</span>
             <span class="rec-name">${rec.name}</span>
             <div class="rec-scores">
-              ${countersHtml}
-              ${synergiesHtml}
+              ${totalDisplay}
+              ${counterDisplay}
+              ${synergyDisplay}
             </div>
           </div>
         `;
@@ -373,3 +445,4 @@ function renderBPResults(recommendations) {
 window.initBP = initBP;
 window.calculateBP = calculateBP;
 window.selectBPHero = selectBPHero;
+window.clearBPSlot = clearBPSlot;
