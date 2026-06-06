@@ -345,6 +345,7 @@ async function startAnalysis(teamId, teamName) {
     const unifiedTop = topHeroesUnified(unified, 10);
     const unifiedCounters = recommendUnifiedCounters(unifiedTop, 12);
     const matchStats = aggregateMatchStats(usable, Team._rosterSet, heroIdMap);
+    const playerStats = aggregatePlayerStats(usable, Team._rosterSet, heroIdMap);
     markProgress('step4', 'done', `${usable.length} 场可分析`);
     if (signal.aborted) return;
 
@@ -359,6 +360,7 @@ async function startAnalysis(teamId, teamName) {
       matchCount: usable.length,
       teamName,
       matchStats,
+      playerStats,
     });
     // Show the result card BEFORE sizing the heatmap canvas, otherwise the
     // #teamWardmapWrap has zero dimensions (display:none ancestor) and the
@@ -955,7 +957,7 @@ function renderPositionSections(playerStats) {
   return html.join('');
 }
 
-function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, matchStats }) {
+function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, matchStats, playerStats }) {
   const card = document.getElementById('teamCountersCard');
   if (!card) return;
 
@@ -963,7 +965,7 @@ function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, mat
   html += `<div class="team-result-subtitle">基于最近 ${matchCount} 场可识别比赛</div>`;
 
   html += renderStatsOverviewHtml(matchStats);
-  html += renderPosKdaTableHtml(matchStats);
+  html += renderPositionSections(playerStats);
 
   if (unifiedTop.length > 0) {
     html += `<div class="team-section-subtitle">📊 全队常驻英雄 TOP ${unifiedTop.length}</div>`;
