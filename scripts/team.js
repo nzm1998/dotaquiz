@@ -874,6 +874,87 @@ function fmtDuration(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+const POSITION_LABELS_FULL = {
+  1: '1号位 · 大哥',
+  2: '2号位 · 中单',
+  3: '3号位 · 劣单',
+  4: '4号位 · 游走',
+  5: '5号位 · 酱油',
+};
+
+function renderPositionSection(playerStat, pos) {
+  if (!playerStat) {
+    return `<div class="team-players-section" data-position="${pos}">
+      <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>
+      <div class="team-player-empty">该位置无数据</div>
+    </div>`;
+  }
+  const winRate = playerStat.games > 0
+    ? ((playerStat.wins / playerStat.games) * 100).toFixed(0)
+    : '—';
+  const heroChips = Array.from(playerStat.heroStats.entries())
+    .sort((a, b) => b[1].games - a[1].games)
+    .slice(0, 5)
+    .map(([heroId, hs]) => {
+      const name = window.BP.getHeroName(heroId) || heroId;
+      const wr = hs.games > 0 ? ((hs.wins / hs.games) * 100).toFixed(0) : '—';
+      const cls = hs.games > 0 && (hs.wins / hs.games) >= 0.5 ? 'positive' : 'negative';
+      return `<div class="team-player-hero-chip ${cls}">
+        <span class="team-player-hero-name">${escapeHtml(name)}</span>
+        <span class="team-player-hero-stats">${hs.games}场 ${wr}%</span>
+      </div>`;
+    }).join('');
+
+  const targets = Array.from(playerStat.heroStats.entries())
+    .map(([heroId, hs]) => ({ heroId, count: hs.games }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+  const counters = recommendUnifiedCounters(targets, 6);
+  const counterChips = counters.map(c => {
+    const wr = c.totalScore.toFixed(1);
+    return `<div class="team-player-counter-chip">
+      <span class="team-player-counter-name">${escapeHtml(c.heroName)}</span>
+      <span class="team-player-counter-score">${wr}</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="team-players-section" data-position="${pos}">
+    <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>
+    <div class="team-player-header">
+      <span class="team-player-name">${escapeHtml(playerStat.name)}</span>
+      <span class="team-player-stats">
+        <span>${playerStat.games}场</span>
+        <span>胜率 ${winRate}%</span>
+        <span>KDA ${playerStat.avgKda.toFixed(2)}</span>
+        <span>GPM ${playerStat.gpm.toFixed(0)}</span>
+        <span>XPM ${playerStat.xpm.toFixed(0)}</span>
+      </span>
+    </div>
+    <div class="team-player-heroes">${heroChips || '<div class="team-player-empty">无招牌英雄</div>'}</div>
+    <div class="team-player-counters">
+      <div class="team-player-counters-label">⚔️ 克制该选手常驻英雄（按场次加权）</div>
+      <div class="team-player-counter-list">${counterChips || '<div class="team-player-empty">无明显克制</div>'}</div>
+    </div>
+  </div>`;
+}
+
+function renderPositionSections(playerStats) {
+  if (!playerStats || playerStats.size === 0) {
+    return '<div class="team-players-empty">无选手数据</div>';
+  }
+  const html = [];
+  for (const pos of [1, 2, 3, 4, 5]) {
+    const candidates = Array.from(playerStats.values()).filter(s => s.mainPos === pos);
+    if (candidates.length === 0) {
+      html.push(renderPositionSection(null, pos));
+      continue;
+    }
+    candidates.sort((a, b) => b.games - a.games);
+    html.push(renderPositionSection(candidates[0], pos));
+  }
+  return html.join('');
+}
+
 function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, matchStats }) {
   const card = document.getElementById('teamCountersCard');
   if (!card) return;
