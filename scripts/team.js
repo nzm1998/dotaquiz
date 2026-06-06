@@ -75,8 +75,28 @@ async function initTeam() {
   bindSearchInput();
   bindAnalyzeButton();
   bindResize();
+  updateProgressLabels();
 
   setStatus(REPLAY_STATUS, '', null);
+}
+
+// Update progress step labels to match the new pipeline:
+//   step1: 获取最近比赛    (was 加载战队信息)
+//   step2: 加载比赛详情    (was 拉取最近 20 场比赛)
+//   step3: 识别当前 5 选手  (was 加载比赛详情)
+//   step4/5: unchanged
+function updateProgressLabels() {
+  const map = {
+    step1: '获取最近比赛',
+    step2: '加载比赛详情',
+    step3: '识别当前 5 选手',
+  };
+  for (const [id, text] of Object.entries(map)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const label = el.querySelector('.team-progress-label');
+    if (label) label.textContent = text;
+  }
 }
 
 // ==================== HERO ID MAPPING (OpenDota numeric -> BP string key) ====================
@@ -278,64 +298,66 @@ async function startAnalysis(teamId, teamName) {
   const signal = Team.analyzeAbort.signal;
 
   try {
-    // Step 1: roster
+    // Step 1: match list (with side info from OpenDota)
     markProgress('step1', 'running');
     setStatus(REPLAY_STATUS, '加载战队信息…', 'loading');
-    let roster;
+    let matchList;
     try {
-      roster = await fetchRoster(teamId, signal);
+      matchList = await fetchMatchList(teamId, signal);
     } catch (e) {
       markProgress('step1', 'error', e.message);
       throw e;
     }
-    Team._rosterSet = roster.accountIds;
-    markProgress('step1', 'done', `已识别 ${roster.accountIds.size} 名选手`);
-    if (signal.aborted) return;
-
-    // Step 2: match list
-    markProgress('step2', 'running');
-    setStatus(REPLAY_STATUS, '拉取最近 20 场比赛…', 'loading');
-    let matchIds;
-    try {
-      matchIds = await fetchMatchList(teamId, signal);
-    } catch (e) {
-      markProgress('step2', 'error', e.message);
-      throw e;
-    }
-    if (!matchIds || matchIds.length === 0) {
-      markProgress('step2', 'error', '该战队暂无公开比赛记录');
+    if (!matchList || matchList.length === 0) {
+      markProgress('step1', 'error', '该战队暂无公开比赛记录');
       setStatus(REPLAY_STATUS, '该战队暂无公开比赛记录，请换一支', 'error');
       return;
     }
-    markProgress('step2', 'done', `共 ${matchIds.length} 场比赛`);
+    markProgress('step1', 'done', `共 ${matchList.length} 场比赛`);
     if (signal.aborted) return;
 
-    // Step 3: fetch matches in parallel
-    markProgress('step3', 'running');
+    // Step 2: fetch match details in parallel
+    markProgress('step2', 'running');
     const matches = [];
     const errors = [];
+    const total = Math.min(matchList.length, MATCH_TARGET);
     let done = 0;
-    const total = matchIds.length;
-    await parallelMap(matchIds, MATCH_CONCURRENCY, async (mid) => {
+    await parallelMap(matchList.slice(0, total), MATCH_CONCURRENCY, async (entry) => {
       try {
-        const m = await fetchMatch(mid, signal);
+        const m = await fetchMatch(entry.match_id, signal);
+        m._ourSide = entry.radiant ? 'radiant' : 'dire';
         matches.push(m);
       } catch (e) {
-        errors.push({ matchId: mid, message: e.message });
-        console.warn('match', mid, 'failed:', e.message);
+        errors.push({ matchId: entry.match_id, message: e.message });
+        console.warn('match', entry.match_id, 'failed:', e.message);
       }
       done += 1;
       setStatus(REPLAY_STATUS, `加载比赛详情 (${done}/${total})…`, 'loading');
-      markProgress('step3', 'running', `${done}/${total}`);
+      markProgress('step2', 'running', `${done}/${total}`);
     });
     if (signal.aborted) return;
 
     if (matches.length === 0) {
-      markProgress('step3', 'error', '所有比赛拉取均失败');
+      markProgress('step2', 'error', '所有比赛拉取均失败');
       setStatus(REPLAY_STATUS, '比赛拉取均失败，请稍后重试。OpenDota 在大陆访问可能慢。', 'error');
       return;
     }
-    markProgress('step3', 'done', `成功 ${matches.length}/${total} 场` + (errors.length ? `，跳过 ${errors.length} 场` : ''));
+    markProgress('step2', 'done', `成功 ${matches.length}/${total} 场` + (errors.length ? `，跳过 ${errors.length} 场` : ''));
+    if (signal.aborted) return;
+
+    // Step 3: build roster from match appearances (top 5)
+    markProgress('step3', 'running');
+    setStatus(REPLAY_STATUS, '识别当前 5 名选手…', 'loading');
+    let roster;
+    try {
+      roster = buildRosterFromMatches(matches);
+    } catch (e) {
+      markProgress('step3', 'error', e.message);
+      throw e;
+    }
+    Team._rosterSet = roster.accountIds;
+    Team._rosterList = roster.accountIdList;
+    markProgress('step3', 'done', `已识别 ${roster.accountIds.size} 名选手`);
     if (signal.aborted) return;
 
     // Step 4: hero positions + counters
@@ -348,11 +370,10 @@ async function startAnalysis(teamId, teamName) {
       setStatus(REPLAY_STATUS, '这 20 场比赛里没有该战队的阵容（可能 roster 已变更）', 'error');
       return;
     }
-    const { buckets, unified } = aggregateHeroPositions(usable, Team._rosterSet, heroIdMap);
-    const unifiedTop = topHeroesUnified(unified, 10);
-    const unifiedCounters = recommendUnifiedCounters(unifiedTop, 12);
+    const { buckets } = aggregateHeroPositions(usable, Team._rosterSet, heroIdMap);
     const matchStats = aggregateMatchStats(usable, Team._rosterSet, heroIdMap);
-    const playerStats = aggregatePlayerStats(usable, Team._rosterSet, heroIdMap);
+    const proPlayers = await fetchProPlayers();
+    const playerStats = aggregatePlayerStats(usable, Team._rosterSet, heroIdMap, proPlayers);
     markProgress('step4', 'done', `${usable.length} 场可分析`);
     if (signal.aborted) return;
 
@@ -362,8 +383,7 @@ async function startAnalysis(teamId, teamName) {
     const wardSplit = aggregateWardsBySide(usable, Team._rosterSet);
     Team._lastWardSplit = wardSplit;
     renderCounters({
-      unifiedTop,
-      unifiedCounters,
+      buckets,
       matchCount: usable.length,
       teamName,
       matchStats,
@@ -412,33 +432,46 @@ function markProgress(id, kind, detailText) {
 }
 
 // ==================== OPENDOTA FETCHERS ====================
-async function fetchRoster(teamId, signal) {
-  // OpenDota's /api/teams/{id} does NOT include a `players` array on the bare response.
-  // The canonical roster endpoint is /api/teams/{id}/players.
-  const res = await fetch('https://api.opendota.com/api/teams/' + teamId + '/players', { signal });
-  if (!res.ok) {
-    if (res.status === 429) throw new Error('限流（429）');
-    if (res.status === 404) throw new Error('未找到该战队');
-    throw new Error('HTTP ' + res.status);
+// /api/teams/{id}/players is CUMULATIVE (returns every player who ever
+// appeared for the team — 27 for BB on 2026-06-06). The current 5 are
+// recovered by inspecting the recent matches' "our side" and taking the
+// top 5 by appearance count.
+async function buildRosterFromMatches(matches) {
+  const counts = new Map();
+  for (const m of matches) {
+    if (!m._ourSide) continue;
+    for (const p of (m.players || [])) {
+      if (!p.account_id) continue;
+      if (p.player_slot === undefined) continue;
+      const isOurs = m._ourSide === 'radiant' ? p.player_slot < 128 : p.player_slot >= 128;
+      if (!isOurs) continue;
+      counts.set(p.account_id, (counts.get(p.account_id) || 0) + 1);
+    }
   }
-  const arr = await res.json();
-  const accountIds = new Set();
-  for (const p of (arr || [])) {
-    if (p.account_id) accountIds.add(p.account_id);
-  }
-  if (accountIds.size === 0) throw new Error('该战队暂无 roster 信息');
-  return { accountIds, raw: arr };
+  if (counts.size === 0) throw new Error('该战队暂无 roster 信息');
+  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  const top5 = sorted.slice(0, 5);
+  return {
+    accountIds: new Set(top5.map(([id]) => id)),
+    accountIdList: top5.map(([id]) => id),
+    rawCounts: sorted,
+  };
 }
 
 async function fetchMatchList(teamId, signal) {
   const res = await fetch('https://api.opendota.com/api/teams/' + teamId + '/matches', { signal });
   if (!res.ok) {
     if (res.status === 429) throw new Error('限流（429）');
+    if (res.status === 404) throw new Error('未找到该战队');
     throw new Error('HTTP ' + res.status);
   }
   const arr = await res.json();
-  // Newest first; OpenDota may not have a `limit` param, so slice client-side
-  return (arr || []).slice(0, MATCH_TARGET).map(m => m.match_id).filter(Boolean);
+  // The `radiant` boolean tells us which side the team was on, so we can
+  // identify "our 5" without needing a roster up front.
+  return (arr || [])
+    .filter(m => m.match_id)
+    .slice(0, 50)
+    .map(m => ({ match_id: m.match_id, radiant: !!m.radiant }));
 }
 
 async function fetchMatch(matchId, signal) {
@@ -480,9 +513,12 @@ async function parallelMap(items, concurrency, fn) {
 
 // ==================== SIDE IDENTIFICATION ====================
 function identifyOurSide(match, rosterSet) {
+  // Trust the explicit side from /api/teams/{id}/matches (avoids depending
+  // on a complete roster).
+  if (match && match._ourSide) return match._ourSide;
   if (!match || !match.players) return null;
-  // OpenDota does not populate `players[].team` on the bare /matches endpoint.
-  // Side comes from `player_slot`: < 128 = Radiant, >= 128 = Dire.
+  if (!rosterSet) return null;
+  // Fallback: count roster hits on each side
   let radHit = 0, dirHit = 0;
   for (const p of match.players) {
     if (!p.account_id) continue;
@@ -748,28 +784,32 @@ function aggregateMatchStats(matches, rosterSet, heroIdMap) {
 // ==================== PLAYER AGGREGATION ====================
 // Aggregate per-player stats across all matches the team played in.
 // Returns Map<account_id, playerStat> where playerStat has:
-//   accountId, name, mainPos, games, wins,
-//   kills, deaths, assists (sums), gpm/xpm (averages),
+//   accountId, name (resolved via proPlayers map), mainPos,
+//   games, wins, kills, deaths, assists (sums), gpm/xpm (averages),
 //   heroStats: Map<heroId, { games, wins }>
-// mainPos is the mode of assignPositionsForMatch() results; falls back
-// to the mode of lane_role across the player's games.
-function aggregatePlayerStats(matches, rosterSet, heroIdMap) {
+// mainPos is the mode of positions derived from player_slot (sorted 0-4 =
+// 1号位-5号位). The player_slot approach is reliable — every match has
+// exactly 5 players on each side, and pro teams' 5 is stable.
+//
+// Fix3: was using lane_role-based assignPositionsForMatch, which left pos 4
+// empty for teams whose 4号位 never gets lane_role=4 (most modern teams).
+function aggregatePlayerStats(matches, rosterSet, heroIdMap, proPlayersMap) {
   const result = new Map();
   for (const m of matches) {
     const side = identifyOurSide(m, rosterSet);
     if (!side) continue;
-    const our = ourPlayers(m, side);
-    const positions = assignPositionsForMatch(m, side, heroIdMap);
+    const our = ourPlayers(m, side).slice();
+    our.sort((a, b) => (a.player_slot || 0) - (b.player_slot || 0));
     const didWin = (side === 'radiant') === !!m.radiant_win;
-    for (const p of our) {
+    for (let i = 0; i < our.length && i < 5; i++) {
+      const p = our[i];
       if (!p.account_id) continue;
       let stat = result.get(p.account_id);
       if (!stat) {
         stat = {
           accountId: p.account_id,
-          name: p.personaname || p.name || ('account_' + String(p.account_id).slice(0, 8)),
+          name: resolvePlayerName(p.account_id, p.personaname, proPlayersMap),
           positions: [],
-          laneRoles: [],
           games: 0, wins: 0,
           kills: 0, deaths: 0, assists: 0,
           gpmSum: 0, xpmSum: 0, gpmN: 0, xpmN: 0,
@@ -784,9 +824,7 @@ function aggregatePlayerStats(matches, rosterSet, heroIdMap) {
       stat.assists += p.assists || 0;
       if (typeof p.gold_per_min === 'number') { stat.gpmSum += p.gold_per_min; stat.gpmN++; }
       if (typeof p.xp_per_min === 'number') { stat.xpmSum += p.xp_per_min; stat.xpmN++; }
-      const pos = positions.get(p.account_id);
-      if (pos) stat.positions.push(pos);
-      if (typeof p.lane_role === 'number') stat.laneRoles.push(p.lane_role);
+      stat.positions.push(i + 1);
       if (p.hero_id) {
         const bpId = heroIdMap && heroIdMap.get(p.hero_id);
         if (bpId && window.BP.getHeroById(bpId)) {
@@ -800,7 +838,6 @@ function aggregatePlayerStats(matches, rosterSet, heroIdMap) {
   }
   for (const stat of result.values()) {
     stat.mainPos = modeOrNull(stat.positions);
-    if (!stat.mainPos) stat.mainPos = modeOrNull(stat.laneRoles);
     stat.gpm = stat.gpmN > 0 ? stat.gpmSum / stat.gpmN : 0;
     stat.xpm = stat.xpmN > 0 ? stat.xpmSum / stat.xpmN : 0;
     stat.avgKda = stat.games > 0
@@ -808,6 +845,40 @@ function aggregatePlayerStats(matches, rosterSet, heroIdMap) {
       : 0;
   }
   return result;
+}
+
+// ==================== PRO PLAYERS NAME RESOLUTION ====================
+// OpenDota's /api/proPlayers maps account_id → known in-game name + team.
+// We prefer this over the raw `personaname` because pro accounts often have
+// random Steam names, while /api/proPlayers has the canonical "Nigma.Miracle-"
+// style ID. Result is cached 24h via loadCachedOrFetch.
+async function fetchProPlayers() {
+  if (Team._proPlayers) return Team._proPlayers;
+  try {
+    const arr = await loadCachedOrFetch('https://api.opendota.com/api/proPlayers', 'opendota_pro_players_v1');
+    const map = new Map();
+    for (const p of (arr || [])) {
+      if (typeof p.account_id !== 'number') continue;
+      map.set(p.account_id, {
+        name: p.name || p.personaname || null,
+        teamId: p.team_id || null,
+      });
+    }
+    Team._proPlayers = map;
+  } catch (e) {
+    console.warn('Failed to load /api/proPlayers:', e);
+    Team._proPlayers = new Map();
+  }
+  return Team._proPlayers;
+}
+
+function resolvePlayerName(accountId, personaname, proPlayersMap) {
+  if (proPlayersMap && proPlayersMap.has(accountId)) {
+    const pro = proPlayersMap.get(accountId);
+    if (pro && pro.name) return pro.name;
+  }
+  if (personaname && personaname !== '' && !/^\d{8,}$/.test(personaname)) return personaname;
+  return 'account_' + String(accountId).slice(0, 8);
 }
 
 function modeOrNull(arr) {
@@ -914,19 +985,8 @@ function renderPositionSection(playerStat, pos) {
       </div>`;
     }).join('');
 
-  const targets = Array.from(playerStat.heroStats.entries())
-    .map(([heroId, hs]) => ({ heroId, count: hs.games }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
-  const counters = recommendUnifiedCounters(targets, 6);
-  const counterChips = counters.map(c => {
-    const wr = c.totalScore.toFixed(1);
-    return `<div class="team-player-counter-chip">
-      <span class="team-player-counter-name">${escapeHtml(c.heroName)}</span>
-      <span class="team-player-counter-score">${wr}</span>
-    </div>`;
-  }).join('');
-
+  // Team analysis section: just position + player + common heroes.
+  // (Counter recommendations moved to a separate section.)
   return `<div class="team-players-section" data-position="${pos}">
     <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>
     <div class="team-player-header">
@@ -940,10 +1000,6 @@ function renderPositionSection(playerStat, pos) {
       </span>
     </div>
     <div class="team-player-heroes">${heroChips || '<div class="team-player-empty">无招牌英雄</div>'}</div>
-    <div class="team-player-counters">
-      <div class="team-player-counters-label">⚔️ 克制该选手常驻英雄（按场次加权）</div>
-      <div class="team-player-counter-list">${counterChips || '<div class="team-player-empty">无明显克制</div>'}</div>
-    </div>
   </div>`;
 }
 
@@ -964,7 +1020,73 @@ function renderPositionSections(playerStats) {
   return html.join('');
 }
 
-function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, matchStats, playerStats }) {
+// ==================== PER-POSITION COUNTER RECOMMENDATIONS ====================
+// Fix4: counter recommendations are now in a SEPARATE section, broken out by
+// position. For each pos 1..5:
+//   targets = team's heroes at that pos (from aggregateHeroPositions buckets),
+//   weight = play count
+//   candidates = BP heroes whose roles include this pos
+//   score = SUM of getCounterScore(cand, t) * t.count over targets
+// Top 3 per position.
+function recommendPositionCounters(teamHeroesAtPos, pos, k) {
+  const allHeroes = window.BP.getAllHeroes();
+  const targetIds = new Set(teamHeroesAtPos.map(t => t.heroId));
+  const results = [];
+  for (const cand of allHeroes) {
+    if (targetIds.has(cand.id)) continue;
+    const candHero = window.BP.getHeroById(cand.id);
+    const candRoles = (candHero && candHero.roles) || [];
+    if (!candRoles.includes(pos)) continue;
+    let totalScore = 0;
+    let hits = 0;
+    for (const t of teamHeroesAtPos) {
+      const s = window.BP.getCounterScore(cand.id, t.heroId);
+      if (s > 0) {
+        totalScore += s * t.count;
+        hits++;
+      }
+    }
+    if (hits === 0) continue;
+    results.push({
+      heroId: cand.id,
+      heroName: window.BP.getHeroName(cand.id) || cand.id,
+      totalScore: +totalScore.toFixed(2),
+      hits,
+    });
+  }
+  results.sort((a, b) => b.totalScore - a.totalScore);
+  return results.slice(0, k);
+}
+
+function renderCounterRecommendations(buckets) {
+  if (!buckets) return '';
+  const sections = [];
+  for (const pos of [1, 2, 3, 4, 5]) {
+    const targets = Array.from((buckets[pos] || new Map()).entries())
+      .map(([heroId, count]) => ({ heroId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    const counters = recommendPositionCounters(targets, pos, 3);
+    const chips = counters.map(c => {
+      const alias = (window.BP.getHeroById(c.heroId)?.alias || [])[0] || '';
+      return `<div class="team-position-counter-chip">
+        <span class="team-position-counter-name">${escapeHtml(c.heroName)}</span>
+        ${alias ? `<span class="team-position-counter-alias">${escapeHtml(alias)}</span>` : ''}
+        <span class="team-position-counter-score">${c.totalScore.toFixed(1)}</span>
+      </div>`;
+    }).join('');
+    sections.push(`<div class="team-position-counter-row" data-position="${pos}">
+      <div class="team-position-counter-label">${POSITION_LABELS_FULL[pos]}</div>
+      <div class="team-position-counter-chips">${chips || '<div class="team-player-empty">无明显克制</div>'}</div>
+    </div>`);
+  }
+  return `<div class="team-counters-block">
+    <div class="team-section-subtitle">⚔️ 按位置克制推荐（每位置 3 个）</div>
+    ${sections.join('')}
+  </div>`;
+}
+
+function renderCounters({ buckets, matchCount, teamName, matchStats, playerStats }) {
   const card = document.getElementById('teamCountersCard');
   if (!card) return;
 
@@ -972,56 +1094,13 @@ function renderCounters({ unifiedTop, unifiedCounters, matchCount, teamName, mat
   html += `<div class="team-result-subtitle">基于最近 ${matchCount} 场可识别比赛</div>`;
 
   html += renderStatsOverviewHtml(matchStats);
+
+  // 战队分析板块: 5 名选手按位置 + 招牌英雄
+  html += `<div class="team-section-subtitle">👥 5 名选手（按位置）</div>`;
   html += renderPositionSections(playerStats);
 
-  if (unifiedTop.length > 0) {
-    html += `<div class="team-section-subtitle">📊 全队常驻英雄 TOP ${unifiedTop.length}</div>`;
-    html += `<div class="team-unified-grid">`;
-    for (const t of unifiedTop) {
-      const name = window.BP.getHeroName(t.heroId) || t.heroId;
-      const alias = (window.BP.getHeroById(t.heroId)?.alias || [])[0] || '';
-      const positions = (window.BP.getHeroById(t.heroId)?.roles || [])
-        .map(p => p + '号位')
-        .join('/');
-      html += `<div class="team-unified-chip">
-        <div class="team-unified-chip-name">${escapeHtml(name)}</div>
-        <div class="team-unified-chip-alias">${escapeHtml(alias)}</div>
-        <div class="team-unified-chip-pos">${escapeHtml(positions)}</div>
-        <div class="team-unified-chip-count">${t.count} 场</div>
-      </div>`;
-    }
-    html += `</div>`;
-  }
-
-  if (unifiedCounters.length > 0) {
-    html += `<div class="team-section-subtitle">⚔️ 克制推荐（按 play count 加权，越常玩权重越高）</div>`;
-    html += `<div class="team-counter-grid">`;
-    const totalPlays = unifiedTop.reduce((s, t) => s + t.count, 0);
-    for (const c of unifiedCounters) {
-      const alias = (window.BP.getHeroById(c.heroId)?.alias || [])[0] || '';
-      const positions = (window.BP.getHeroById(c.heroId)?.roles || [])
-        .map(p => p + '号位')
-        .join('/');
-      // Sum of play-counts of the team's heroes this candidate counters.
-      // Reflects "how many of the team's recent games does this counter apply to".
-      const coveredPlays = c.targetsCovered.reduce((s, hid) => {
-        const t = unifiedTop.find(x => x.heroId === hid);
-        return s + (t ? t.count : 0);
-      }, 0);
-      html += `<div class="team-counter-card">
-        <div class="team-counter-card-name">${escapeHtml(c.heroName)}</div>
-        <div class="team-counter-card-alias">${escapeHtml(alias)}</div>
-        <div class="team-counter-card-pos">${escapeHtml(positions)}</div>
-        <div class="team-counter-card-stats">
-          <span class="team-counter-card-score">${c.totalScore.toFixed(1)}</span>
-          <span class="team-counter-card-hits">覆盖 ${c.hits}/10 英雄 · ${coveredPlays} 场</span>
-        </div>
-      </div>`;
-    }
-    html += `</div>`;
-  } else {
-    html += `<div class="team-counter-empty">无明显克制组合</div>`;
-  }
+  // 克制推荐板块: 每个位置 3 个
+  html += renderCounterRecommendations(buckets);
 
   card.innerHTML = html;
 }
