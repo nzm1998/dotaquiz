@@ -350,7 +350,7 @@ async function startAnalysis(teamId, teamName) {
     setStatus(REPLAY_STATUS, '识别当前 5 名选手…', 'loading');
     let roster;
     try {
-      roster = buildRosterFromMatches(matches);
+      roster = await buildRosterFromMatches(matches);
     } catch (e) {
       markProgress('step3', 'error', e.message);
       throw e;
@@ -401,6 +401,7 @@ async function startAnalysis(teamId, teamName) {
 
     setStatus(REPLAY_STATUS, '分析完成', 'success');
   } catch (e) {
+    console.error('analysis failed:', e);
     if (e.name === 'AbortError') {
       setStatus(REPLAY_STATUS, '已取消', null);
     } else {
