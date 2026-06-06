@@ -25,10 +25,12 @@ const WARD_GRID = 4;            // bucket ward (x,y) to nearest WARD_GRID-cell
 const WARD_TOP_N = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 const TEAM_ROSTER_HIT_THRESHOLD = 3;  // min roster overlap to trust a side identification
-// OpenDota's obs_log / sen_log use Dota 2 world coordinates (roughly 64-192 in both
-// axes for the standard map). Map them to a normalized 0-1 range for canvas drawing.
-const WARD_WORLD_MIN = 64;
-const WARD_WORLD_MAX = 192;
+// OpenDota's obs_log / sen_log use Dota 2 world coordinates. 实测多战队 20 场
+// 范围 x: 65.1-193.6, y: 59.9-191.6 (来源: probe_wards.js)。用稍宽的窗口
+// 56-200 捕获 outliers，再由 canvas 内的 X_MIN/X_MAX=0.03-0.97 把点压回底图
+// 实际可玩区 (避开两侧黑边)。
+const WARD_WORLD_MIN = 56;
+const WARD_WORLD_MAX = 200;
 const REPLAY_STATUS = 'teamStatus';
 const PROGRESS_STATUS = 'teamProgressStatus';
 
