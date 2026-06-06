@@ -26,11 +26,16 @@ const WARD_TOP_N = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 const TEAM_ROSTER_HIT_THRESHOLD = 3;  // min roster overlap to trust a side identification
 // OpenDota's obs_log / sen_log use Dota 2 world coordinates. 实测多战队 20 场
-// 范围 x: 65.1-193.6, y: 59.9-191.6 (来源: probe_wards.js)。用稍宽的窗口
-// 56-200 捕获 outliers，再由 canvas 内的 X_MIN/X_MAX=0.03-0.97 把点压回底图
-// 实际可玩区 (避开两侧黑边)。
+// 范围 x: 65.1-193.6, y: 59.9-191.6。用稍宽的窗口 56-200 捕获 outliers。
+// 底图 dota_map_7.40.jpg (8878x8356) 的实际可玩区是去掉右上角黑色 L 形:
+//   x: 0% ~ 94.2%,  y: 9.3% ~ 100%  (实测: /tmp/find_playable2.py)
+// canvas 把 bucket 网格 (0-128) 映射到该可玩区。
 const WARD_WORLD_MIN = 56;
 const WARD_WORLD_MAX = 200;
+const WARD_CANVAS_X_MIN = 0.000;
+const WARD_CANVAS_X_MAX = 0.942;
+const WARD_CANVAS_Y_MIN = 0.093;
+const WARD_CANVAS_Y_MAX = 1.000;
 const REPLAY_STATUS = 'teamStatus';
 const PROGRESS_STATUS = 'teamProgressStatus';
 
@@ -1143,13 +1148,12 @@ function drawWardmapOnto(wrap, canvas, map) {
 
   if (entries.length === 0) return;
 
-  // The user's map image is 1.06:1 but the playable map area is 1:1 centered
-  // horizontally — there are ~3% black bars on each side. OpenDota's minimap
-  // coords are 0-128, but to keep dots within the actual map content (not
-  // the black bars), we map x into the inner 0.03-0.97 range.
-  // Y is unconstrained because the image height == map height.
-  const X_MIN = 0.03, X_MAX = 0.97;
-  const Y_MIN = 0.00, Y_MAX = 1.00;
+  // The map image (dota_map_7.40.jpg, 8878x8356) has a black L-shape in the
+  // top-right corner (~5.8% wide, ~9.3% tall). The playable area is the
+  // complement of that L. WARD_CANVAS_X_MIN/MAX/Y_MIN/MAX define the safe zone
+  // so dots always land on visible map content.
+  const X_MIN = WARD_CANVAS_X_MIN, X_MAX = WARD_CANVAS_X_MAX;
+  const Y_MIN = WARD_CANVAS_Y_MIN, Y_MAX = WARD_CANVAS_Y_MAX;
 
   for (const e of entries) {
     const px = (X_MIN + (e.x / 128) * (X_MAX - X_MIN)) * cssW;
