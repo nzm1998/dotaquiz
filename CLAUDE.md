@@ -166,6 +166,10 @@ doc(id: "q1") → subcollection "items"
 
 | 日期 | 文件 | 变更 |
 |------|------|------|
+| 2026-06-06 | scripts/team.js | 选手个人数据面板 + 眼位坐标范围修正 |
+| 2026-06-06 | style.css | 选手卡片样式 |
+| 2026-06-06 | test_team.js | 端到端测试 (LGD 验证) |
+| 2026-06-06 | docs/superpowers/ | 改进 spec + 实现计划 |
 | 2026-05-23 | style.css | 深色电竞主题重构 |
 | 2026-05-23 | scripts/quiz.js | 加载动画 + 选项随机打乱 |
 | 2026-05-23 | scripts/bp.js | 骨架屏加载 |
