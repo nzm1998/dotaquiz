@@ -52,6 +52,9 @@ async function loadAccuracyCache() {
       setTimeout(() => reject(new Error('Firestore timeout')), 5000);
     });
 
+    if (typeof statsCollection === 'undefined' || !statsCollection || typeof statsCollection.get !== 'function') {
+      throw new Error('Firestore not available');
+    }
     const snapshot = await Promise.race([statsCollection.get(), timeoutPromise]);
 
     accuracyCache = {};
@@ -89,16 +92,26 @@ async function recordAnswer(questionId, selectedOption, isCorrect) {
   }, { merge: true }).catch(e => console.error('Failed to update stats:', e));
 }
 
-async function loadQuestions() {
+async function loadQuestions(retryCount = 0) {
   try {
-    const res = await fetch('questions.json');
-    if (!res.ok) throw new Error('加载题目失败');
+    const res = await fetch('questions.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     allQuestions = data.questions;
-    if (allQuestions.length === 0) throw new Error('没有题目');
+    if (allQuestions.length === 0) throw new Error('题库为空');
   } catch (e) {
+    if (retryCount < 2) {
+      console.warn(`[quiz] loadQuestions retry ${retryCount + 1}: ${e.message}`);
+      await new Promise(r => setTimeout(r, 800));
+      return loadQuestions(retryCount + 1);
+    }
+    console.error('[quiz] loadQuestions failed after retries:', e);
     const app = document.getElementById('quiz-screen');
-    app.innerHTML = `<div style="padding:120px 24px;text-align:center;"><p style="color:var(--error);font-size:18px;">${e.message}</p></div>`;
+    app.innerHTML = `<div style="padding:120px 24px;text-align:center;max-width:480px;margin:0 auto;">
+      <p style="color:var(--error);font-size:18px;margin-bottom:8px;">题目加载失败</p>
+      <p style="color:var(--mute);font-size:14px;margin-bottom:24px;">请检查网络后重试。(${e.message})</p>
+      <button onclick="initQuiz()" style="padding:10px 24px;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-family:inherit;">重新加载</button>
+    </div>`;
   }
 }
 
@@ -228,14 +241,12 @@ function renderQuestion() {
   const q = questions[currentIndex];
   const difficultyName = DIFFICULTIES[currentDifficulty].name;
 
-  // 打乱选项和字母
-  const shuffledOptions = shuffleArrayWithAnswer(q.options, q._answer);
-  const shuffledOptionLetters = shuffleArray([...OPTION_LETTERS]);
-
-  const optionsHtml = shuffledOptions.map((opt, i) => `
-    <div class="option" data-index="${i}" ${opt.isCorrect ? 'data-correct="true"' : ''}>
-      <span class="option-indicator">${shuffledOptionLetters[i]}</span>
-      <span class="option-text">${opt.text}</span>
+  // 选项保持原顺序 abcd，不乱序
+  const correctIndex = q._answer;
+  const optionsHtml = q.options.map((text, i) => `
+    <div class="option" data-index="${i}" ${i === correctIndex ? 'data-correct="true"' : ''}>
+      <span class="option-indicator">${OPTION_LETTERS[i]}</span>
+      <span class="option-text">${text}</span>
     </div>
   `).join('');
 
@@ -317,7 +328,7 @@ function restoreAnsweredState(q, answerData) {
   }
 
   document.getElementById('nextBtn').classList.add('show');
-  renderCommentSection(q.id);
+  renderCommentCollapsed(q.id);
 }
 
 function attachOptionListeners() {
@@ -362,7 +373,24 @@ async function showFeedback(isCorrect, questionId) {
   }
 
   document.getElementById('nextBtn').classList.add('show');
-  renderCommentSection(questionId);
+  renderCommentCollapsed(questionId);
+}
+
+function renderCommentCollapsed(questionId) {
+  const feedbackEl = document.getElementById('feedback');
+  const wrap = document.createElement('div');
+  wrap.className = 'comment-section comment-collapsed';
+  wrap.innerHTML = `
+    <button type="button" class="comment-toggle" id="commentToggle">
+      💬 查看讨论区
+      <span class="comment-toggle-hint">（评论走 Firestore 实时同步，首次可能较慢）</span>
+    </button>
+  `;
+  feedbackEl.appendChild(wrap);
+  document.getElementById('commentToggle').addEventListener('click', () => {
+    wrap.remove();
+    renderCommentSection(questionId);
+  }, { once: true });
 }
 
 async function renderCommentSection(questionId) {
@@ -391,38 +419,71 @@ async function renderCommentSection(questionId) {
     if (e.key === 'Enter') submitComment(questionId);
   });
 
+  const listEl = document.getElementById('commentsList');
+  const cacheKey = 'comments_cache_v1_' + questionId;
+
+  // 1) Paint cached comments immediately (instant on repeat visits; first visit falls through to "加载中…").
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        renderCommentsData(listEl, parsed);
+      } else {
+        listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
+      }
+    }
+  } catch (e) { /* ignore cache errors */ }
+
+  // 2) Subscribe to live updates; the initial snapshot may still take a while
+  //    on the very first visit, but subsequent visits are served from the cache.
   const commentsRef = commentsCollection.doc(questionId.toString()).collection('items');
   commentsUnsubscribe = commentsRef
     .orderBy('timestamp', 'desc')
     .limit(20)
     .onSnapshot((snapshot) => {
-      const listEl = document.getElementById('commentsList');
       if (!listEl) return;
 
       if (snapshot.empty) {
+        try { localStorage.setItem(cacheKey, '[]'); } catch (e) {}
         listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
         return;
       }
 
-      listEl.innerHTML = '';
-      snapshot.forEach(doc => {
-        const comment = doc.data();
-        const time = comment.timestamp ? new Date(comment.timestamp.toDate()).toLocaleString('zh-CN') : '刚刚';
-        listEl.innerHTML += `
-          <div class="comment-item">
-            <div class="comment-meta">
-              <span class="comment-author">${escapeHtml(comment.author || '匿名')}</span>
-              <span class="comment-time">${time}</span>
-            </div>
-            <div class="comment-text">${escapeHtml(comment.text)}</div>
-          </div>
-        `;
-      });
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (e) {}
+      renderCommentsData(listEl, data);
     }, (error) => {
       console.error('Comments listener error:', error);
-      const listEl = document.getElementById('commentsList');
-      if (listEl) listEl.innerHTML = '<div class="comment-empty">评论加载失败</div>';
+      if (listEl && !listEl.querySelector('.comment-item')) {
+        listEl.innerHTML = '<div class="comment-empty">评论加载失败，请稍后重试</div>';
+      }
     });
+}
+
+function renderCommentsData(listEl, data) {
+  if (!listEl) return;
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  data.forEach(comment => {
+    const time = comment.timestamp && comment.timestamp.toDate
+      ? new Date(comment.timestamp.toDate()).toLocaleString('zh-CN')
+      : (comment.timestamp && comment.timestamp._seconds
+          ? new Date(comment.timestamp._seconds * 1000).toLocaleString('zh-CN')
+          : '刚刚');
+    listEl.innerHTML += `
+      <div class="comment-item">
+        <div class="comment-meta">
+          <span class="comment-author">${escapeHtml(comment.author || '匿名')}</span>
+          <span class="comment-time">${time}</span>
+        </div>
+        <div class="comment-text">${escapeHtml(comment.text)}</div>
+      </div>
+    `;
+  });
 }
 
 function submitComment(questionId) {

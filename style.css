@@ -3437,7 +3437,466 @@ body::before {
   background: linear-gradient(135deg, var(--accent-red), var(--accent-gold));
   border-color: transparent;
 }
+/* ==================== Pro BP: step-by-step layout ==================== */
+.pro-bp-layout {
+  display: flex;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+.pro-bp-panel {
+  flex: 1;
+  min-width: 0;
+  max-width: 620px;
+}
+.pro-bp-hero-grid-panel {
+  flex: 0 0 360px;
+  position: sticky;
+  top: 80px;
+  background: rgba(15,18,30,0.85);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: calc(100vh - 100px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pro-bp-hero-grid-search {
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.pro-bp-hero-grid-search input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+.pro-bp-hero-grid-search input:focus {
+  border-color: var(--accent-gold, #f0a500);
+}
+.pro-bp-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+  padding-top: 20px;
+  margin-top: -20px;
+}
+.pro-bp-hero-grid::-webkit-scrollbar { width: 4px; }
+.pro-bp-hero-grid::-webkit-scrollbar-track { background: transparent; }
+.pro-bp-hero-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+.pro-bp-hero-grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  border: 2px solid transparent;
+  background: rgba(255,255,255,0.03);
+  position: relative;
+}
+.pro-bp-hero-grid-item:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+}
+.pro-bp-hero-grid-item.selected {
+  border-color: #4ade80;
+  background: rgba(74,222,128,0.1);
+}
+.pro-bp-hero-grid-item.banned {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.05);
+}
+.pro-bp-hero-grid-item.picked-by-me {
+  border-color: #4ade80;
+  background: rgba(74,222,128,0.12);
+  cursor: not-allowed;
+}
+.pro-bp-hero-grid-item.picked-by-enemy {
+  border-color: #ef4444;
+  background: rgba(239,68,68,0.12);
+  cursor: not-allowed;
+}
+.pro-bp-hero-grid-item.can-pick {
+  border-color: rgba(74,222,128,0.4);
+  background: rgba(74,222,128,0.06);
+}
+.pro-bp-hero-grid-item.can-pick:hover {
+  border-color: #4ade80;
+  background: rgba(74,222,128,0.15);
+}
+.pro-bp-hero-grid-item.can-ban {
+  border-color: rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.04);
+}
+.pro-bp-hero-grid-item.can-ban:hover {
+  border-color: #ef4444;
+  background: rgba(239,68,68,0.12);
+}
+.pro-bp-hero-grid-avatar {
+  width: 44px;
+  height: 25px;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.pro-bp-hero-grid-name {
+  font-size: 9px;
+  color: #ccc;
+  text-align: center;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.pro-bp-hero-grid-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 8px;
+  line-height: 1;
+}
+/* Progress bar */
+.pro-bp-progress {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.pro-bp-progress-step {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  transition: background 0.2s;
+}
+.pro-bp-progress-step.done { background: var(--accent-gold, #f0a500); }
+.pro-bp-progress-step.current { background: #4ade80; }
+.pro-bp-progress-step.ban-step.done { background: #ef4444; }
+.pro-bp-progress-step.ban-step.current { background: #ef4444; }
+/* Step info */
+.pro-bp-step-info {
+  text-align: center;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+}
+.pro-bp-step-phase {
+  font-family: var(--font-game);
+  font-size: 12px;
+  color: var(--accent-gold);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.pro-bp-step-action {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+.pro-bp-step-action.waiting-enemy {
+  color: #ef4444;
+}
+/* Bans display */
+.pro-bp-bans {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pro-bp-bans-team {
+  flex: 1;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 8px;
+}
+.pro-bp-bans-label {
+  font-family: var(--font-game);
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+.pro-bp-bans-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pro-bp-ban-slot {
+  width: 40px;
+  height: 23px;
+  border-radius: 3px;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  overflow: hidden;
+  position: relative;
+}
+.pro-bp-ban-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pro-bp-ban-slot.empty {
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.1);
+}
+.pro-bp-ban-slot .ban-cross {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #ef4444;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+/* Lineup in pro BP */
+.pro-bp-lineups {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pro-bp-lineup {
+  flex: 1;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 8px;
+}
+.pro-bp-lineup-label {
+  font-family: var(--font-game);
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+.pro-bp-lineup-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pro-bp-lineup-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(255,255,255,0.03);
+}
+.pro-bp-lineup-slot.picked {
+  background: rgba(74,222,128,0.06);
+  border: 1px solid rgba(74,222,128,0.15);
+}
+.pro-bp-lineup-slot.enemy-picked {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.15);
+}
+.pro-bp-lineup-slot-pos {
+  font-family: var(--font-game);
+  font-size: 10px;
+  color: #666;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pro-bp-lineup-slot-avatar {
+  width: 28px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.pro-bp-lineup-slot-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ddd;
+}
+.pro-bp-lineup-slot-empty {
+  color: #555;
+  font-style: italic;
+  font-size: 11px;
+}
+/* Step nav buttons */
+.pro-bp-step-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+}
+.pro-bp-nav-btn {
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: white;
+  font-family: var(--font-game);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+}
+.pro-bp-nav-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+}
+.pro-bp-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.pro-bp-nav-btn--primary {
+  background: linear-gradient(135deg, var(--accent-red), var(--accent-gold));
+  border-color: transparent;
+}
+.pro-bp-nav-btn--primary:hover {
+  transform: translateY(-1px);
+}
+.pro-bp-step-count {
+  font-family: var(--font-game);
+  font-size: 13px;
+  color: #888;
+  min-width: 60px;
+  text-align: center;
+}
+.pro-bp-hero-grid-item.disabled-click {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+@media (max-width: 900px) {
+  .pro-bp-layout { flex-direction: column; }
+  .pro-bp-hero-grid-panel {
+    flex: none;
+    width: 100%;
+    position: static;
+    max-height: 300px;
+  }
+  .pro-bp-hero-grid { grid-template-columns: repeat(5, 1fr); }
+}
 
+
+
+
+
+
+/* ==================== Casual mode recommendation columns ==================== */
+.rec-columns {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+.rec-col {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.rec-col-title {
+  font-family: var(--font-game);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-gold, #f0a500);
+  text-align: center;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+.rec-col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 400px;
+}
+.rec-col-hero {
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  padding: 6px;
+}
+.rec-col-hero-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.rec-col-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.1);
+}
+.rec-col-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ddd;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rec-col-strength {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4ade80;
+  font-family: var(--font-game), monospace;
+  flex-shrink: 0;
+}
+.rec-col-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rec-col-scores .score-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.rec-col-scores .score-item .score-val {
+  font-size: 10px;
+}
+/* Hide score-kind labels in column view (use inline color instead) */
+.rec-col-scores .score-kind {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .rec-columns {
+    flex-wrap: wrap;
+  }
+  .rec-col {
+    flex: 0 0 calc(50% - 4px);
+  }
+}
 /* ==================== TEAM PLAYER SECTIONS ==================== */
 .team-players-section {
   background: rgba(15, 18, 30, 0.6);
@@ -3634,9 +4093,285 @@ body::before {
   margin-left: 2px;
 }
 
+
+/* ==================== Compact BP mode (casual mode inside bp-screen) ==================== */
+#bp-screen .compact-mode .lineup-card {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: 14px;
+  margin-bottom: var(--space-md);
+}
+#bp-screen .compact-mode .lineup-label { font-size: 12px; margin-bottom: var(--space-sm); }
+#bp-screen .compact-mode .positions-row { gap: 6px; }
+#bp-screen .compact-mode .score-card {
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-md);
+  border-radius: 12px;
+}
+#bp-screen .compact-mode .score-card-title { font-size: 14px; margin-bottom: var(--space-sm); }
+#bp-screen .compact-mode .score-grid { gap: var(--space-md); }
+#bp-screen .compact-mode .hero-dropdown { height: 42px; }
+#bp-screen .compact-mode .hero-dropdown-input { padding: 6px 8px 6px 36px; font-size: 12px; height: 32px; }
+#bp-screen .compact-mode .bp-mode-tabs { margin-bottom: var(--space-sm); }
+#bp-screen .compact-mode .bp-mode-tab { padding: 6px 12px; font-size: 12px; }
+#bp-screen .compact-mode .filter-section { margin-bottom: var(--space-sm); }
+#bp-screen .compact-mode .bp-advice-card { padding: var(--space-md); }
+
+
+/* ==================== Avatar fallback for hero grid ==================== */
+.pro-bp-hero-grid-avatar.avatar-fallback {
+  width: 44px;
+  height: 25px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.pro-bp-ban-slot img.avatar-fallback {
+  display: none;
+}
+
+
+
+/* ==================== Recommendation highlights ==================== */
+.pro-bp-hero-grid-item.recommended {
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+.pro-bp-hero-grid-item.recommended:hover {
+  background: rgba(74, 222, 128, 0.2);
+  border-color: #4ade80;
+}
+.pro-bp-hero-grid-item.not-recommended {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+.pro-bp-hero-grid-item.not-recommended:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.pro-bp-hero-grid-item.recommended.top1 {
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5), 0 0 16px rgba(74, 222, 128, 0.2);
+  animation: proBPGlow 1.5s ease-in-out infinite alternate;
+}
+.pro-bp-hero-grid-item.recommended.top2 {
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.35);
+}
+.pro-bp-hero-grid-item.recommended.top3 {
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.25);
+}
+@keyframes proBPGlow {
+  0% { box-shadow: 0 0 6px rgba(74, 222, 128, 0.4), 0 0 12px rgba(74, 222, 128, 0.15); }
+  100% { box-shadow: 0 0 10px rgba(74, 222, 128, 0.6), 0 0 20px rgba(74, 222, 128, 0.3); }
+}
+
+/* Tooltip for recommendation score */
+.pro-bp-hero-grid-item[data-score]:hover::after {
+  content: attr(data-score-label);
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.92);
+  color: #4ade80;
+  font-size: 12px;
+  font-family: var(--font-game), monospace;
+  padding: 6px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 99999;
+  pointer-events: none;
+  border: 1px solid rgba(74,222,128,0.4);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  line-height: 1.5;
+}
+/* First row: show tooltip below instead of above to avoid viewport clipping */
+.pro-bp-hero-grid-item:nth-child(-n+6)[data-score]:hover::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+.pro-bp-hero-grid-item.not-recommended[data-score]:hover::after {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.3);
+}
+/* Neutral score for unranked available heroes */
+.pro-bp-hero-grid-item:not(.recommended):not(.not-recommended)[data-score]:hover::after {
+  color: #a0a0a0;
+  border-color: rgba(160,160,160,0.3);
+}
+/* First row also for not-recommended */
+.pro-bp-hero-grid-item.not-recommended:nth-child(-n+6)[data-score]:hover::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+
+/* ==================== Pro BP: phase highlighting ==================== */
+.pro-bp-step-info.phase-ban {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+}
+.pro-bp-step-info.phase-pick {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.06);
+}
+.pro-bp-step-action.step-first {
+  color: #4ade80;
+}
+.pro-bp-step-action.step-second {
+  color: #ef4444;
+}
+.pro-bp-progress-step.current-step {
+  transform: scaleY(1.6);
+  opacity: 1;
+}
+
+/* ==================== Pro BP: hero grid filter buttons ==================== */
+.pro-bp-hero-grid-filter {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.pro-bp-filter-btn {
+  flex: 1;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: #aaa;
+  font-family: var(--font-cjk), var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.pro-bp-filter-btn:hover {
+  color: white;
+  background: rgba(255,255,255,0.08);
+}
+.pro-bp-filter-btn.active {
+  color: white;
+  background: linear-gradient(135deg, var(--accent-red), var(--accent-gold));
+  border-color: transparent;
+}
+
+/* ==================== Pro BP: score card ==================== */
+.pro-bp-score-card {
+  max-width: 960px;
+  margin: 16px auto 0;
+  padding: var(--space-md) var(--space-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+.pro-bp-score-card .score-card-title {
+  font-family: var(--font-game);
+  font-size: 14px;
+  color: var(--accent-gold);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 0.05em;
+}
+.pro-bp-score-card .score-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-md);
+  align-items: stretch;
+}
+.pro-bp-score-card .score-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-sm);
+}
+.pro-bp-score-card .score-col--my .score-col-total { color: #4ade80; }
+.pro-bp-score-card .score-col--enemy .score-col-total { color: #ef4444; }
+.pro-bp-score-card .score-col-total {
+  font-family: var(--font-game);
+  font-size: 24px;
+  font-weight: 800;
+  margin: 4px 0;
+}
+.pro-bp-score-card .score-col-label {
+  font-family: var(--font-game);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: #888;
+}
+.pro-bp-score-card .score-breakdown {
+  font-size: 12px;
+  width: 100%;
+}
+.pro-bp-score-card .score-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: #999;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.pro-bp-score-card .score-breakdown-row .val { font-weight: 600; color: #ccc; }
+.pro-bp-score-card .score-gap-hint {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+
+/* ==================== Pro BP: current slot highlight ==================== */
+.pro-bp-lineup-slot.slot-current {
+  background: rgba(74, 222, 128, 0.15);
+  border: 2px solid #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
+  animation: slotPulse 1.2s ease-in-out infinite alternate;
+}
+.pro-bp-lineup:last-child .pro-bp-lineup-slot.slot-current {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+@keyframes slotPulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+
+/* ==================== Pro BP: ban slot current ==================== */
+.pro-bp-ban-slot.ban-slot-current {
+  border-color: #ffd700;
+  border-width: 2px;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+  animation: banSlotGlow 1s ease-in-out infinite alternate;
+}
+@keyframes banSlotGlow {
+  0% { box-shadow: 0 0 4px rgba(255, 215, 0, 0.3); }
+  100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.6); }
+}
+
 @media (max-width: 768px) {
   .team-position-counter-row {
     grid-template-columns: 1fr;
     gap: 8px;
   }
+}
+
+
+/* ==================== Pro BP position sections ==================== */
+.pro-bp-pos-header {
+  font-family: var(--font-game);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-gold, #f0a500);
+  text-align: center;
+  grid-column: 1 / -1;
+  padding: 10px 0 6px 0;
+  margin: 0;
+  letter-spacing: 0.05em;
+}
+.pro-bp-pos-separator {
+  grid-column: 1 / -1;
+  height: 0;
+  margin: 4px 0;
+  border-bottom: 1px dashed rgba(255,255,255,0.10);
 }

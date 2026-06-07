@@ -49,14 +49,18 @@ function handleRoute() {
   const homeScreen = document.getElementById('home-screen');
   const quizScreen = document.getElementById('quiz-screen');
   const bpScreen = document.getElementById('bp-screen');
+  const replayScreen = document.getElementById('replay-screen');
   const navQuiz = document.getElementById('nav-quiz');
   const navBp = document.getElementById('nav-bp');
+  const navReplay = document.getElementById('nav-replay');
 
   homeScreen.style.display = 'none';
   quizScreen.style.display = 'none';
   bpScreen.style.display = 'none';
+  replayScreen.style.display = 'none';
   navQuiz.classList.remove('active');
   navBp.classList.remove('active');
+  if (navReplay) navReplay.classList.remove('active');
 
   if (hash === 'quiz') {
     quizScreen.style.display = 'block';
@@ -69,6 +73,10 @@ function handleRoute() {
     bpScreen.style.display = 'block';
     navBp.classList.add('active');
     window.initBP && window.initBP();
+  } else if (hash === 'replay') {
+    replayScreen.style.display = 'block';
+    if (navReplay) navReplay.classList.add('active');
+    window.initTeam && window.initTeam();
   } else {
     homeScreen.style.display = 'block';
   }
@@ -129,9 +137,13 @@ const db = firebase.firestore();
 const answersCollection = db.collection('answers');
 const statsCollection = db.collection('question_stats');
 const commentsCollection = db.collection('comments');
+const replaysCollection = db.collection('replays');
 
 // Export shared functions
 window.navigate = navigate;
 window.handleRoute = handleRoute;
 window.playCorrectSound = playCorrectSound;
 window.playWrongSound = playWrongSound;
+window.replaysCollection = replaysCollection;
+window.firebase = firebase;
+window.db = db;

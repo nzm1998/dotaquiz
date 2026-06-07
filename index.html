@@ -14,6 +14,36 @@
   <script src="firebase-config.js"></script>
 </head>
 <body>
+  <script>
+    // Show the right screen immediately based on the URL hash, so the user
+    // never sees the dark body background as a "black screen" while waiting
+    // for deferred scripts and the `load` event to fire. app.js#handleRoute
+    // will re-apply the same logic on `load` / `hashchange`.
+    (function () {
+      function applyRoute() {
+        try {
+          var hash = (window.location.hash || '').replace('#', '');
+          var valid = ['home', 'quiz', 'bp', 'replay'];
+          var route = valid.indexOf(hash) >= 0 ? hash : 'home';
+          ['home', 'quiz', 'bp', 'replay'].forEach(function (s) {
+            var el = document.getElementById(s + '-screen');
+            if (el) el.style.display = (s === route) ? 'block' : 'none';
+          });
+          var navMap = { quiz: 'nav-quiz', bp: 'nav-bp', replay: 'nav-replay' };
+          Object.keys(navMap).forEach(function (k) {
+            var n = document.getElementById(navMap[k]);
+            if (n) n.classList.toggle('active', k === route);
+          });
+        } catch (e) { /* fail silently — app.js will recover */ }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applyRoute, { once: true });
+      } else {
+        applyRoute();
+      }
+    })();
+  </script>
+
   <!-- Navigation -->
   <nav class="nav">
     <a href="#" class="nav-logo" onclick="navigate('home'); return false;">
@@ -23,6 +53,7 @@
     <div class="nav-links">
       <span class="nav-link" onclick="navigate('quiz')" id="nav-quiz">答题</span>
       <span class="nav-link" onclick="navigate('bp')" id="nav-bp">BP建议</span>
+      <span class="nav-link" onclick="navigate('replay')" id="nav-replay">战队分析</span>
     </div>
     <div class="nav-cta"></div>
   </nav>
@@ -37,10 +68,10 @@
           <span>Dota2 工具集合</span>
         </div>
         <h1 class="hero-title animate-in delay-1">
-          Dota2 <span>双模块工具站</span>
+          Dota2 <span>三模块工具站</span>
         </h1>
         <p class="hero-subtitle animate-in delay-2">
-          趣味答题测试你的刀塔知识，BP建议助你打出最优阵容。两个工具，一个入口。
+          答题、BP建议、战队分析，一站式刀塔工具。
         </p>
       </div>
     </section>
@@ -75,6 +106,20 @@
             </div>
             <div class="module-card-arrow">→</div>
           </div>
+
+          <div class="module-card module-card--new" onclick="navigate('replay')">
+            <div class="module-card-header">
+              <div class="module-icon-wrap">🏆</div>
+              <span class="module-badge module-badge--new">NEW</span>
+            </div>
+            <h3 class="module-name">战队分析</h3>
+            <p class="module-desc">选择一支战队，自动拉取最近 20 场比赛，生成 5 个位置常驻英雄 + 统一克制推荐 + 高频眼位热力图。</p>
+            <div class="module-meta">
+              <div class="module-meta-item"><span>📊</span><span>多维数据</span></div>
+              <div class="module-meta-item"><span>🗺️</span><span>眼位热力图</span></div>
+            </div>
+            <div class="module-card-arrow">→</div>
+          </div>
         </div>
       </div>
     </section>
@@ -90,16 +135,28 @@
   </div>
 
   <!-- QUIZ SCREEN -->
-  <div id="quiz-screen"></div>
+  <div id="quiz-screen">
+    <div class="quiz-loading">
+      <div class="quiz-loading-spinner"></div>
+      <div class="quiz-loading-text">加载中...</div>
+    </div>
+  </div>
 
   <!-- BP SCREEN -->
-  <div id="bp-screen">
+    <div id="bp-screen" class="compact-mode">
     <div class="bp-container">
       <header class="bp-header">
         <h1 class="bp-header-title">⚔️ Dota2 BP 建议工具</h1>
         <p class="bp-header-subtitle">基于英雄克制与配合关系计算最优阵容</p>
       </header>
 
+      <div class="bp-mode-tabs" id="bpModeTabs">
+        <button class="bp-mode-tab active" data-mode="casual">天梯模式</button>
+        <button class="bp-mode-tab" data-mode="pro">职业模式</button>
+      </div>
+      <div class="bp-mode-desc" id="bpModeDesc">天梯模式：根据双方阵容自动算出每个位置的克制 / 配合建议</div>
+
+      <div id="bpCasualUI">
       <div class="lineup-card">
         <div class="lineup-label my-team"><span>🟢</span> 我方阵容</div>
         <div class="positions-row" id="myTeam"></div>
@@ -109,7 +166,10 @@
         <div class="lineup-label enemy-team"><span>🔴</span> 敌方阵容</div>
         <div class="positions-row" id="enemyTeam"></div>
       </div>
+      </div>
 
+      <!-- Casual mode: filter + brief -->
+      <div id="casualModePanel">
       <div class="filter-section">
         <span class="filter-label">我的位置（可选）：</span>
         <select class="position-filter" id="myPosition">
@@ -122,16 +182,198 @@
         </select>
       </div>
 
-      <button class="calculate-btn" id="calculateBtn" onclick="calculateBP()">
-        <span>⚔️</span> 开始给出 BP 建议
-      </button>
+      <div class="filter-section filter-section--secondary">
+        <label class="toggle-switch" for="positionFilterToggle">
+          <span class="toggle-label">按位置推荐</span>
+          <input type="checkbox" id="positionFilterToggle" checked>
+          <span class="toggle-track" aria-hidden="true">
+            <span class="toggle-thumb"></span>
+          </span>
+        </label>
+        <span class="filter-hint" id="positionFilterHint">仅从对应位置的英雄中推荐</span>
+      </div>
 
-      <div class="results-card" id="resultsCard">
-        <div class="results-title">🏆 推荐英雄</div>
+      <div class="bp-advice-card bp-advice-card--brief" id="resultsCard">
+        <div class="bp-advice-title">📊 BP 速查（按位置全景：推荐 / 慎选 + 敌方预测 / 规避）</div>
         <div id="resultsContent"></div>
+      </div>
+      </div>
+
+      <div class="score-card" id="lineupScoreCard">
+        <div class="score-card-title">🏆 阵容总得分</div>
+        <div class="score-grid">
+          <div class="score-col score-col--my" data-team="my">
+            <div class="score-col-label"><span class="dot dot--my"></span> 我方</div>
+            <div class="score-col-total" id="myScoreTotal">--</div>
+            <div class="score-breakdown" id="myScoreBreakdown"></div>
+          </div>
+          <div class="score-col score-col--gap" data-team="gap">
+            <div class="score-col-label">差距</div>
+            <div class="score-col-total" id="gapScore">--</div>
+            <div class="score-gap-hint" id="gapHint">完成阵容后查看对比</div>
+          </div>
+          <div class="score-col score-col--enemy" data-team="enemy">
+            <div class="score-col-label"><span class="dot dot--enemy"></span> 敌方</div>
+            <div class="score-col-total" id="enemyScoreTotal">--</div>
+            <div class="score-breakdown" id="enemyScoreBreakdown"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pro mode: step-by-step BP simulation -->
+      <div id="proModePanel" style="display: none;">
+        <div class="pro-bp-layout">
+          <!-- Left: BP simulation panel -->
+          <div class="pro-bp-panel">
+            <div class="pro-bp-progress" id="proBPProgress"></div>
+            <div class="pro-bp-actions">
+              <div class="pro-bp-seed">
+                <span style="font-size:12px;color:#888;">模拟 BP · 24 手流程</span>
+              </div>
+            </div>
+            <div class="pro-bp-step-info" id="proBPStepInfo">
+              <div class="pro-bp-step-phase" id="proBPPhase"></div>
+              <div class="pro-bp-step-action" id="proBPAction">请选择模式开始</div>
+            </div>
+            <div class="pro-bp-bans" id="proBPBans">
+              <div class="pro-bp-bans-team">
+                <div class="pro-bp-bans-label">🚫 先选方禁用（7）</div>
+                <div class="pro-bp-bans-slots" id="proBPRBans"></div>
+              </div>
+              <div class="pro-bp-bans-team">
+                <div class="pro-bp-bans-label">🚫 后选方禁用（7）</div>
+                <div class="pro-bp-bans-slots" id="proBPDBans"></div>
+              </div>
+            </div>
+            <div class="pro-bp-lineups" id="proBPLineups"></div>
+            <div class="pro-bp-step-nav" id="proBPStepNav" style="display:none">
+              <button class="pro-bp-nav-btn" id="proBPPrevBtn">◀ 上一步</button>
+              <span class="pro-bp-step-count" id="proBPStepCount">0 / 24</span>
+              <button class="pro-bp-nav-btn pro-bp-nav-btn--primary" id="proBPNextBtn">下一步 ▶</button>
+              <button class="pro-bp-nav-btn" id="proBPAutoBtn">▶ 自动</button>
+            </div>
+          </div>
+          <div class="pro-bp-hero-grid-panel" id="proBPHeroGridPanel" style="display:none">
+            <div class="pro-bp-hero-grid-search">
+              <input type="text" id="proBPHeroSearch" placeholder="搜索英雄..." autocomplete="off">
+            </div>
+            <div class="pro-bp-hero-grid-filter">
+              <button class="pro-bp-filter-btn active" id="proBPFilterAll">所有英雄</button>
+              <button class="pro-bp-filter-btn" id="proBPFilterR">先选方推荐</button>
+              <button class="pro-bp-filter-btn" id="proBPFilterD">后选方推荐</button>
+            </div>
+            <div class="pro-bp-hero-grid" id="proBPHeroGrid"></div>
+          </div>
+        </div>
+        <div class="pro-bp-score-card" id="proBPScoreCard" style="display:none;">
+          <div class="score-card-title">🏆 阵容总得分</div>
+          <div class="score-grid">
+            <div class="score-col score-col--my" data-team="my">
+              <div class="score-col-label"><span class="dot dot--my"></span> 先选方</div>
+              <div class="score-col-total" id="proMyScoreTotal">--</div>
+              <div class="score-breakdown" id="proMyScoreBreakdown"></div>
+            </div>
+            <div class="score-col score-col--gap" data-team="gap">
+              <div class="score-col-label">差距</div>
+              <div class="score-col-total" id="proGapScore">--</div>
+              <div class="score-gap-hint" id="proGapHint">BP 进行中...</div>
+            </div>
+            <div class="score-col score-col--enemy" data-team="enemy">
+              <div class="score-col-label"><span class="dot dot--enemy"></span> 后选方</div>
+              <div class="score-col-total" id="proEnemyScoreTotal">--</div>
+              <div class="score-breakdown" id="proEnemyScoreBreakdown"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>  <!-- REPLAY SCREEN (team analysis) -->
+  <div id="replay-screen">
+    <div class="replay-container">
+      <header class="bp-header">
+        <h1 class="bp-header-title">🏆 战队分析</h1>
+        <p class="bp-header-subtitle">选战队 → 拉最近 20 场 → 位置常驻英雄 + 克制推荐 + 高频眼位热力图</p>
+      </header>
+      <div class="bp-mode-tabs" id="bpModeTabs">
+        <button class="bp-mode-tab active" data-mode="casual">天梯模式</button>
+        <button class="bp-mode-tab" data-mode="pro">职业模式</button>
+      </div>
+      <div class="bp-mode-desc" id="bpModeDesc">天梯模式：根据双方阵容自动算出每个位置的克制 / 配合建议</div>
+
+      <header class="bp-header">
+        <h1 class="bp-header-title">⚔️ Dota2 BP 建议工具</h1>
+        <p class="bp-header-subtitle">基于英雄克制与配合关系计算最优阵容</p>
+      </header>
+
+      <div id="bpCasualUI">
+      <div class="lineup-card">
+        <div class="lineup-label my-team"><span>🟢</span> 我方阵容</div>
+
+      <div class="replay-input-card team-picker-card">
+        <div class="filter-label">精选战队：</div>
+        <div class="team-chips" id="teamChips"></div>
+
+        <div class="team-search-block">
+          <label class="filter-label" for="teamSearchInput">🔍 搜索（战队名或 Tag）：</label>
+          <input type="text" id="teamSearchInput" class="replay-input team-search-input" placeholder="例如：Liquid、OG、XG、Secret、PSG.LGD..." autocomplete="off">
+          <div class="team-search-results" id="teamSearchResults" style="display:none"></div>
+        </div>
+
+        <button class="calculate-btn" id="teamAnalyzeBtn">🔍 开始分析</button>
+        <div class="replay-status" id="teamStatus"></div>
+      </div>
+
+      <div class="replay-result-card team-progress-card" id="teamProgressCard" style="display:none">
+        <div class="replay-result-title">⏳ 分析进度</div>
+        <ul class="team-progress-list">
+          <li class="team-progress-step" id="step1"><span class="team-progress-bullet"></span><span class="team-progress-label">加载战队信息</span><span class="team-progress-detail"></span></li>
+          <li class="team-progress-step" id="step2"><span class="team-progress-bullet"></span><span class="team-progress-label">拉取最近 20 场比赛</span><span class="team-progress-detail"></span></li>
+          <li class="team-progress-step" id="step3"><span class="team-progress-bullet"></span><span class="team-progress-label">加载比赛详情</span><span class="team-progress-detail"></span></li>
+          <li class="team-progress-step" id="step4"><span class="team-progress-bullet"></span><span class="team-progress-label">解析位置 + 克制</span><span class="team-progress-detail"></span></li>
+          <li class="team-progress-step" id="step5"><span class="team-progress-bullet"></span><span class="team-progress-label">汇总眼位</span><span class="team-progress-detail"></span></li>
+        </ul>
+      </div>
+
+      <div class="replay-result-card" id="teamResultCard" style="display:none">
+        <div class="replay-result-card-inner">
+          <div class="replay-result-title">📊 分析结果</div>
+          <div id="teamCountersCard"></div>
+
+          <div class="team-wardmap-card" id="teamWardmapCard">
+            <div class="team-wardmap-title">🗺️ 高频眼位热力图</div>
+            <div class="team-wardmap-subtitle">基于该队 5 名选手最近 20 场可识别比赛的<strong>假眼</strong>分布</div>
+            <div class="team-wardmap-sides">
+              <div class="team-wardmap-side">
+                <div class="team-wardmap-side-title">🟢 天辉方眼位 <span class="team-wardmap-side-count" id="teamWardmapRadCount">—</span></div>
+                <div class="team-wardmap-wrap" data-side="radiant">
+                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map">
+                  <canvas class="team-wardmap-canvas"></canvas>
+                </div>
+              </div>
+              <div class="team-wardmap-side">
+                <div class="team-wardmap-side-title">🔴 夜魇方眼位 <span class="team-wardmap-side-count" id="teamWardmapDireCount">—</span></div>
+                <div class="team-wardmap-wrap" data-side="dire">
+                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map">
+                  <canvas class="team-wardmap-canvas"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="replay-tips">
+        <div class="replay-tips-title">💡 怎么用？</div>
+        <ul>
+          <li>从上方精选芯片选一支战队，或用搜索框搜战队名/Tag</li>
+          <li>OpenDota 公开数据，无须登录；约 20-30 秒完成 20 场比赛分析</li>
+          <li>OpenDota 在大陆访问可能慢/超时，可稍后重试；浏览器直连需要 CORS 允许（已开）</li>
+          <li>位置常驻 = 该战队选手在最近 20 场里最常使用的英雄；克制推荐基于本地 counter_matrix.csv</li>
+        </ul>
       </div>
     </div>
   </div>
+
 
   <!-- Audio Controls -->
   <div class="audio-controls">
@@ -140,8 +382,10 @@
   </div>
 
   <script src="bp_agent.js"></script>
+  <script src="scripts/util.js"></script>
   <script src="scripts/app.js"></script>
   <script src="scripts/quiz.js" defer></script>
   <script src="scripts/bp.js" defer></script>
+  <script src="scripts/team.js" defer></script>
 </body>
 </html>

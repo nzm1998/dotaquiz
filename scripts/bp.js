@@ -17,10 +17,6 @@ async function initBP() {
   if (bpInitialized) return;
   bpInitialized = true;
 
-  const calculateBtn = document.getElementById('calculateBtn');
-  calculateBtn.disabled = true;
-  calculateBtn.textContent = '加载中...';
-
   // 先立即显示UI骨架，避免白屏
   renderBPSelectsSkeleton();
 
@@ -34,8 +30,7 @@ async function initBP() {
 
   bpHeroes = BP.getAllHeroes();
   renderBPSelects();
-  calculateBtn.disabled = false;
-  calculateBtn.innerHTML = '<span>⚔️</span> 开始给出 BP 建议';
+  initProBP();
 }
 
 function renderBPSelectsSkeleton() {
@@ -366,3 +361,491 @@ function renderBPResults(recommendations) {
 window.initBP = initBP;
 window.calculateBP = calculateBP;
 window.selectBPHero = selectBPHero;
+// ==================== PRO MODE (BP simulation) ====================
+
+let proBPInitialized = false;
+let proBPState = null;
+let proBPFilterMode = 'all'; // 'all' | 'recR' | 'recD'
+let heroScoresR = {}; // heroId -> total score for Radiant
+let heroScoresD = {}; // heroId -> total score for Dire
+const colorMap = {};
+
+const PRO_BP_STEPS = [
+  { team: 'R', action: 'ban' },
+  { team: 'D', action: 'ban' },
+  { team: 'R', action: 'ban' },
+  { team: 'D', action: 'ban' },
+  { team: 'R', action: 'ban' },
+  { team: 'D', action: 'ban' },
+  { team: 'R', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'R', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'R', action: 'ban' },
+  { team: 'D', action: 'ban' },
+  { team: 'R', action: 'ban' },
+  { team: 'D', action: 'ban' },
+  { team: 'R', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'R', action: 'pick' },
+  { team: 'R', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'D', action: 'pick' },
+  { team: 'R', action: 'pick' },
+  { team: 'R', action: 'pick' },
+  { team: 'D', action: 'pick' },
+];
+
+function createProBPState(team) {
+  return {
+    picks: { R: [], D: [] },
+    bans: { R: [], D: [] },
+    available: new Set(bpHeroes.map(h => h.id)),
+    currentStep: 0,
+    myTeam: team,
+    started: false,
+    ended: false,
+  };
+}
+
+function initProBP() {
+  if (proBPInitialized) return;
+  proBPInitialized = true;
+
+  const allBtn = document.getElementById('proBPFilterAll');
+  const rBtn = document.getElementById('proBPFilterR');
+  const dBtn = document.getElementById('proBPFilterD');
+  const searchInput = document.getElementById('proBPHeroSearch');
+  const prevBtn = document.getElementById('proBPPrevBtn');
+  const nextBtn = document.getElementById('proBPNextBtn');
+  const autoBtn = document.getElementById('proBPAutoBtn');
+
+  if (allBtn) allBtn.addEventListener('click', () => { proBPFilterMode = 'all'; updateFilterBtns(); renderProBPGrid(); });
+  if (rBtn) rBtn.addEventListener('click', () => { proBPFilterMode = 'recR'; updateFilterBtns(); renderProBPGrid(); });
+  if (dBtn) dBtn.addEventListener('click', () => { proBPFilterMode = 'recD'; updateFilterBtns(); renderProBPGrid(); });
+  if (searchInput) searchInput.addEventListener('input', () => renderProBPGrid());
+
+  if (prevBtn) prevBtn.addEventListener('click', proBPPrev);
+  if (nextBtn) nextBtn.addEventListener('click', proBPNext);
+  if (autoBtn) autoBtn.addEventListener('click', proBPAuto);
+
+  document.querySelectorAll('#bpModeTabs .bp-mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#bpModeTabs .bp-mode-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.mode;
+      const casualPanel = document.getElementById('casualModePanel');
+      const proPanel = document.getElementById('proModePanel');
+      const desc = document.getElementById('bpModeDesc');
+      if (mode === 'pro') {
+        casualPanel.style.display = 'none';
+        proPanel.style.display = 'block';
+        desc.textContent = '职业模式：模拟 24 步 BP 流程，英雄按位置分组显示推荐/克制分数';
+        if (!proBPState) {
+          proBPStart();
+        }
+        renderProBPGrid();
+        updateProBPUI();
+      } else {
+        casualPanel.style.display = 'block';
+        proPanel.style.display = 'none';
+        desc.textContent = '天梯模式：根据双方阵容自动算出每个位置的克制 / 配合建议';
+      }
+    });
+  });
+}
+
+function updateFilterBtns() {
+  const allBtn = document.getElementById('proBPFilterAll');
+  const rBtn = document.getElementById('proBPFilterR');
+  const dBtn = document.getElementById('proBPFilterD');
+  if (allBtn) allBtn.classList.toggle('active', proBPFilterMode === 'all');
+  if (rBtn) rBtn.classList.toggle('active', proBPFilterMode === 'recR');
+  if (dBtn) dBtn.classList.toggle('active', proBPFilterMode === 'recD');
+}
+
+function proBPStart() {
+  proBPState = createProBPState('R');
+  proBPState.started = true;
+  const panel = document.getElementById('proBPHeroGridPanel');
+  if (panel) panel.style.display = 'block';
+  const nav = document.getElementById('proBPStepNav');
+  if (nav) nav.style.display = 'flex';
+  updateProBPUI();
+}
+
+function getDisplayedHeroes() {
+  if (!proBPState || !bpHeroes.length) return [];
+  return bpHeroes.filter(h => proBPState.available.has(h.id)).sort((a, b) =>
+    (BP.getHeroName(a.id) || '').localeCompare(BP.getHeroName(b.id) || ''));
+}
+
+function computeHeroScores() {
+  if (!proBPState) return;
+  heroScoresR = {};
+  heroScoresD = {};
+  const myLineup = proBPState.picks[proBPState.myTeam].slice(0, 5);
+  while (myLineup.length < 5) myLineup.push('');
+  const enemyTeam = proBPState.myTeam === 'R' ? 'D' : 'R';
+  const enemyLineup = proBPState.picks[enemyTeam].slice(0, 5);
+  while (enemyLineup.length < 5) enemyLineup.push('');
+  for (const hero of bpHeroes) {
+    if (!proBPState.available.has(hero.id)) continue;
+    const rScore = BP.getCandidateScores(hero.id, myLineup, enemyLineup);
+    const dScore = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup);
+    heroScoresR[hero.id] = rScore ? rScore.totalStrength : 0;
+    heroScoresD[hero.id] = dScore ? dScore.totalStrength : 0;
+  }
+}
+
+function avatarColorFor(heroId) {
+  if (colorMap[heroId]) return colorMap[heroId];
+  let h = 0;
+  for (let i = 0; i < heroId.length; i++) {
+    h = heroId.charCodeAt(i) + ((h << 5) - h);
+  }
+  const c = (h & 0x00FFFFFF).toString(16).toUpperCase().padStart(6, '0');
+  colorMap[heroId] = '#' + c;
+  return colorMap[heroId];
+}
+
+function renderProBPGrid() {
+  const grid = document.getElementById('proBPHeroGrid');
+  if (!grid || !proBPState) return;
+
+  const search = (document.getElementById('proBPHeroSearch')?.value || '').toLowerCase().trim();
+  const def = PRO_BP_STEPS[proBPState.currentStep];
+  const isBanTurn = def && def.action === 'ban';
+  const isPickTurn = def && def.action === 'pick';
+  const ended = proBPState.ended;
+
+  if (proBPFilterMode !== 'all') {
+    computeHeroScores();
+  }
+
+  const displayedHeroes = getDisplayedHeroes();
+
+  // Build HTML
+  let html = '';
+
+  if (proBPFilterMode !== 'all' && proBPState && def) {
+    // recR/recD mode: same styling as "all" mode, just reordered by position
+    const scoreMap = proBPFilterMode === 'recR' ? heroScoresR : heroScoresD;
+    const posLabels = {1:'1号位', 2:'2号位', 3:'3号位', 4:'4号位', 5:'5号位'};
+    const posSeparator = '<div class="pro-bp-pos-separator"></div>';
+
+    for (let pos = 1; pos <= 3; pos++) {
+      const posHeroes = displayedHeroes.filter(h => BP.canPlayPosition(h.id, pos));
+      const sorted = posHeroes.slice().sort((a, b) => (scoreMap[b.id] ?? -Infinity) - (scoreMap[a.id] ?? -Infinity));
+
+      html += '<div class="pro-bp-pos-header">' + posLabels[pos] + '</div>';
+
+      for (const hero of sorted) {
+        const name = BP.getHeroName(hero.id);
+        const aliases = (hero.alias || []).join(' ');
+        if (search && !(name + ' ' + aliases + ' ' + hero.id).toLowerCase().includes(search)) continue;
+
+        const isAvailable = proBPState.available.has(hero.id);
+        const isBanned = !isAvailable && (proBPState.bans.R.includes(hero.id) || proBPState.bans.D.includes(hero.id));
+        const isPickedByR = proBPState.picks.R.includes(hero.id);
+        const isPickedByD = proBPState.picks.D.includes(hero.id);
+
+        let cls = 'pro-bp-hero-grid-item';
+        let badge = '';
+
+        if (isBanned) {
+          cls += ' banned';
+          badge = '🚫';
+        } else if (isPickedByR) {
+          cls += ' picked-by-me';
+          badge = '✅';
+        } else if (isPickedByD) {
+          cls += ' picked-by-enemy';
+          badge = '🔴';
+        } else if (isAvailable && !ended) {
+          if (isBanTurn) {
+            cls += ' can-ban';
+          } else if (isPickTurn) {
+            cls += ' can-pick';
+          }
+        } else {
+          cls += ' disabled-click';
+        }
+
+        const url = BP.getHeroAvatarUrl(hero.id);
+        const initChar = (name || '?').charAt(0);
+        const color = avatarColorFor(hero.id);
+
+        let avatarHtml;
+        if (url) {
+          avatarHtml = `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}"
+               onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`;
+        } else {
+          avatarHtml = `<div class="pro-bp-hero-grid-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
+        }
+
+        html += '<div class="' + cls + '" data-hero-id="' + hero.id + '" onclick="onProBPHeroClick(\'' + hero.id + '\')">';
+        html += avatarHtml;
+        if (badge) html += '<span class="pro-bp-hero-grid-badge">' + badge + '</span>';
+        html += '<span class="pro-bp-hero-grid-name">' + name + '</span>';
+        html += '</div>';
+      }
+
+      if (pos < 3) {
+        html += posSeparator;
+      }
+    }
+  } else {
+    // "all" mode: flat grid
+    for (const hero of displayedHeroes) {
+      const name = BP.getHeroName(hero.id);
+      const aliases = (hero.alias || []).join(' ');
+      if (search && !(name + ' ' + aliases + ' ' + hero.id).toLowerCase().includes(search)) continue;
+
+      const isAvailable = proBPState.available.has(hero.id);
+      const isBanned = !isAvailable && (proBPState.bans.R.includes(hero.id) || proBPState.bans.D.includes(hero.id));
+      const isPickedByR = proBPState.picks.R.includes(hero.id);
+      const isPickedByD = proBPState.picks.D.includes(hero.id);
+
+      let cls = 'pro-bp-hero-grid-item';
+      let badge = '';
+
+      if (isBanned) {
+        cls += ' banned';
+        badge = '🚫';
+      } else if (isPickedByR) {
+        cls += ' picked-by-me';
+        badge = '✅';
+      } else if (isPickedByD) {
+        cls += ' picked-by-enemy';
+        badge = '🔴';
+      } else if (isAvailable && !ended) {
+        if (isBanTurn) {
+          cls += ' can-ban';
+        } else if (isPickTurn) {
+          cls += ' can-pick';
+        }
+      } else {
+        cls += ' disabled-click';
+      }
+
+      const url = BP.getHeroAvatarUrl(hero.id);
+      const initChar = (name || '?').charAt(0);
+      const color = avatarColorFor(hero.id);
+
+      let avatarHtml;
+      if (url) {
+        avatarHtml = `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}"
+             onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`;
+      } else {
+        avatarHtml = `<div class="pro-bp-hero-grid-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
+      }
+
+      html += '<div class="' + cls + '" data-hero-id="' + hero.id + '" onclick="onProBPHeroClick(\'' + hero.id + '\')">';
+      html += avatarHtml;
+      if (badge) html += '<span class="pro-bp-hero-grid-badge">' + badge + '</span>';
+      html += '<span class="pro-bp-hero-grid-name">' + name + '</span>';
+      html += '</div>';
+    }
+  }
+
+  grid.innerHTML = html;
+}
+
+function onProBPHeroClick(heroId) {
+  if (!proBPState || proBPState.ended) return;
+  const def = PRO_BP_STEPS[proBPState.currentStep];
+  if (!def) return;
+  const allPicked = [...proBPState.picks.R, ...proBPState.picks.D];
+  const allBanned = [...proBPState.bans.R, ...proBPState.bans.D];
+  if (allPicked.includes(heroId) || allBanned.includes(heroId)) return;
+  if (def.action === 'ban') {
+    proBPState.bans[def.team].push(heroId);
+  } else {
+    proBPState.picks[def.team].push(heroId);
+  }
+  proBPState.available.delete(heroId);
+  proBPState.currentStep++;
+  if (proBPState.currentStep >= PRO_BP_STEPS.length) {
+    proBPState.ended = true;
+  }
+  updateProBPUI();
+  renderProBPGrid();
+}
+
+function updateProBPUI() {
+  if (!proBPState) return;
+  const def = PRO_BP_STEPS[proBPState.currentStep];
+  const step = proBPState.currentStep;
+  const total = PRO_BP_STEPS.length;
+
+  const progressEl = document.getElementById('proBPProgress');
+  if (progressEl) {
+    let barHtml = '';
+    for (let i = 0; i < total; i++) {
+      const s = PRO_BP_STEPS[i];
+      let pCls = 'pro-bp-progress-step';
+      if (i < step) pCls += ' done';
+      else if (i === step) pCls += ' current';
+      if (s.action === 'ban') pCls += ' ban-step';
+      barHtml += '<div class="' + pCls + '"></div>';
+    }
+    progressEl.innerHTML = barHtml;
+  }
+
+  const phaseEl = document.getElementById('proBPPhase');
+  const actionEl = document.getElementById('proBPAction');
+  if (phaseEl && actionEl) {
+    if (proBPState.ended) {
+      phaseEl.textContent = '✅ BP 结束';
+      actionEl.textContent = '阵容确定！';
+      actionEl.classList.remove('waiting-enemy');
+    } else if (def) {
+      const teamName = def.team === 'R' ? '先选方' : '后选方';
+      const actionName = def.action === 'ban' ? '禁用' : '选择';
+      phaseEl.textContent = '第 ' + (step + 1) + ' / ' + total + ' 手';
+      actionEl.textContent = teamName + ' ' + actionName + '英雄';
+      actionEl.classList.toggle('waiting-enemy', def.team !== proBPState.myTeam);
+    }
+  }
+
+  renderProBPBans();
+  renderProBPLineups();
+  updateProBPScoreCard();
+
+  const countEl = document.getElementById('proBPStepCount');
+  if (countEl) countEl.textContent = step + ' / ' + total;
+
+  const prevBtn = document.getElementById('proBPPrevBtn');
+  const nextBtn = document.getElementById('proBPNextBtn');
+  if (prevBtn) prevBtn.disabled = step <= 0;
+  if (nextBtn) nextBtn.disabled = proBPState.ended || step >= total;
+}
+
+function renderProBPBans() {
+  const rBansEl = document.getElementById('proBPRBans');
+  const dBansEl = document.getElementById('proBPDBans');
+  if (!rBansEl || !dBansEl) return;
+
+  const renderBans = (bans, currentTeam) => {
+    let html = '';
+    const def = PRO_BP_STEPS[proBPState.currentStep];
+    const isCurrentBan = def && def.action === 'ban' && def.team === currentTeam;
+    for (let i = 0; i < 7; i++) {
+      const heroId = bans[i];
+      let cls = 'pro-bp-ban-slot';
+      if (heroId) {
+        const url = BP.getHeroAvatarUrl(heroId);
+        const name = BP.getHeroName(heroId);
+        html += '<div class="' + cls + '">';
+        html += '<img src="' + url + '" alt="' + name + '" onerror="this.outerHTML=\'<div class=&quot;pro-bp-ban-slot empty&quot;>×</div>\'"><div class="ban-cross">✕</div></div>';
+      } else {
+        if (isCurrentBan && i === bans.length) cls += ' ban-slot-current empty';
+        else cls += ' empty';
+        html += '<div class="' + cls + '"></div>';
+      }
+    }
+    return html;
+  };
+
+  rBansEl.innerHTML = renderBans(proBPState.bans.R, 'R');
+  dBansEl.innerHTML = renderBans(proBPState.bans.D, 'D');
+}
+
+function renderProBPLineups() {
+  const lineupEl = document.getElementById('proBPLineups');
+  if (!lineupEl) return;
+  const renderLineup = (teamLabel, picks) => {
+    const padded = picks.slice(0, 5);
+    while (padded.length < 5) padded.push('');
+    let html = '<div class="pro-bp-lineup"><div class="pro-bp-lineup-label">' + teamLabel + '</div><div class="pro-bp-lineup-slots">';
+    padded.forEach((heroId, idx) => {
+      const pos = idx + 1;
+      if (heroId) {
+        const name = BP.getHeroName(heroId);
+        const url = BP.getHeroAvatarUrl(heroId);
+        html += '<div class="pro-bp-lineup-slot picked"><span class="pro-bp-lineup-slot-pos">' + pos + '</span>';
+        html += '<img class="pro-bp-lineup-slot-avatar" src="' + url + '" alt="' + name + '" onerror="this.style.display=\'none\'"><span class="pro-bp-lineup-slot-name">' + name + '</span></div>';
+      } else {
+        html += '<div class="pro-bp-lineup-slot"><span class="pro-bp-lineup-slot-pos">' + pos + '</span><span class="pro-bp-lineup-slot-empty">待选择</span></div>';
+      }
+    });
+    html += '</div></div>';
+    return html;
+  };
+  const myTeam = proBPState.myTeam;
+  const enemyTeam = myTeam === 'R' ? 'D' : 'R';
+  lineupEl.innerHTML = renderLineup(myTeam === 'R' ? '🟢 先选方' : '🔴 后选方', proBPState.picks[myTeam]) +
+    renderLineup(myTeam === 'R' ? '🔴 后选方' : '🟢 先选方', proBPState.picks[enemyTeam]);
+}
+
+function updateProBPScoreCard() {
+  const card = document.getElementById('proBPScoreCard');
+  if (!card) return;
+  const myTeam = proBPState.myTeam;
+  const enemyTeam = myTeam === 'R' ? 'D' : 'R';
+  const myPicks = proBPState.picks[myTeam].filter(id => id);
+  const enemyPicks = proBPState.picks[enemyTeam].filter(id => id);
+  if (enemyPicks.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const myLineup = [...myPicks];
+  while (myLineup.length < 5) myLineup.push('');
+  const enemyLineup2 = [...enemyPicks];
+  while (enemyLineup2.length < 5) enemyLineup2.push('');
+  let myScore = 0, mySynergy = 0, myCounter = 0;
+  for (const heroId of myPicks) {
+    const scores = BP.getCandidateScores(heroId, myLineup.filter((h,i) => h !== heroId || i >= myPicks.length), enemyLineup2);
+    if (scores) { myScore += scores.totalStrength; mySynergy += scores.synergies.reduce((s, x) => s + x.score, 0); myCounter += scores.counters.reduce((s, x) => s + x.net, 0); }
+  }
+  let enemyScore = 0, enemySynergy = 0, enemyCounter = 0;
+  for (const heroId of enemyPicks) {
+    const scores = BP.getCandidateScoresForEnemy(heroId, enemyLineup2.filter((h,i) => h !== heroId || i >= enemyPicks.length), myLineup);
+    if (scores) { enemyScore += scores.totalStrength; enemySynergy += scores.synergies.reduce((s, x) => s + x.score, 0); enemyCounter += scores.counters.reduce((s, x) => s + x.net, 0); }
+  }
+  document.getElementById('proMyScoreTotal').textContent = myScore.toFixed(1);
+  document.getElementById('proEnemyScoreTotal').textContent = enemyScore.toFixed(1);
+  document.getElementById('proGapScore').textContent = (myScore - enemyScore).toFixed(1);
+  const fmt = n => (n >= 0 ? '+' : '') + n.toFixed(1);
+  document.getElementById('proMyScoreBreakdown').innerHTML = '<div class="score-breakdown-row"><span>配合</span><span class="val">' + fmt(mySynergy) + '</span></div><div class="score-breakdown-row"><span>克制</span><span class="val">' + fmt(myCounter) + '</span></div>';
+  document.getElementById('proEnemyScoreBreakdown').innerHTML = '<div class="score-breakdown-row"><span>配合</span><span class="val">' + fmt(enemySynergy) + '</span></div><div class="score-breakdown-row"><span>克制</span><span class="val">' + fmt(enemyCounter) + '</span></div>';
+}
+
+function proBPPrev() {
+  if (!proBPState || proBPState.currentStep <= 0) return;
+  const step = proBPState.currentStep - 1;
+  const prevStep = PRO_BP_STEPS[step];
+  if (prevStep.action === 'ban') { const r = proBPState.bans[prevStep.team].pop(); if (r) proBPState.available.add(r); }
+  else { const r = proBPState.picks[prevStep.team].pop(); if (r) proBPState.available.add(r); }
+  proBPState.currentStep = step;
+  proBPState.ended = false;
+  updateProBPUI();
+  renderProBPGrid();
+}
+
+function proBPNext() {
+  if (proBPState && !proBPState.ended) onProBPHeroClick('__auto_skip__');
+}
+
+function proBPAuto() {
+  if (!proBPState || proBPState.ended) return;
+  const autoInterval = setInterval(() => {
+    if (proBPState.ended) { clearInterval(autoInterval); return; }
+    const def = PRO_BP_STEPS[proBPState.currentStep];
+    if (!def) { clearInterval(autoInterval); return; }
+    computeHeroScores();
+    const avail = bpHeroes.filter(h => proBPState.available.has(h.id));
+    if (avail.length === 0) { proBPState.ended = true; updateProBPUI(); renderProBPGrid(); clearInterval(autoInterval); return; }
+    const scoreMap = def.team === 'R' ? heroScoresR : heroScoresD;
+    let best = avail[0], bestScore = -Infinity;
+    for (const hero of avail) { const s = scoreMap[hero.id] ?? -Infinity; if (s > bestScore) { bestScore = s; best = hero; } }
+    onProBPHeroClick(best.id);
+  }, 500);
+}
+
+window.initProBP = initProBP;
+window.proBPStart = proBPStart;
+window.onProBPHeroClick = onProBPHeroClick;
+window.proBPPrev = proBPPrev;
+window.proBPNext = proBPNext;
+window.proBPAuto = proBPAuto;

@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "note": "team_id 来自 https://api.opendota.com/api/teams。实现时若需更新，运行 curl 重新核对。",
+  "teams": [
+    { "team_id": 15,       "name": "LGD Gaming",        "tag": "LGD",       "region": "CN" },
+    { "team_id": 2163,     "name": "Team Liquid",       "tag": "Liquid",    "region": "EU" },
+    { "team_id": 9247354,  "name": "Team Falcons",      "tag": "FLCN",      "region": "ME" },
+    { "team_id": 8255888,  "name": "BetBoom Team",      "tag": "BB",        "region": "CIS" },
+    { "team_id": 9823272,  "name": "Team Yandex",       "tag": "TY",        "region": "CIS" },
+    { "team_id": 9467224,  "name": "Aurora Gaming",     "tag": "Aurora",    "region": "EU" },
+    { "team_id": 7119388,  "name": "Team Spirit",       "tag": "TSpirit",   "region": "CIS" },
+    { "team_id": 8291895,  "name": "Tundra Esports",    "tag": "Tundra",    "region": "EU" },
+    { "team_id": 2586976,  "name": "OG",                "tag": "OG",        "region": "EU" },
+    { "team_id": 10081680, "name": "GLYPH",             "tag": "GLYPH",     "region": "EU" },
+    { "team_id": 8261500,  "name": "Xtreme Gaming",     "tag": "XG",        "region": "CN" },
+    { "team_id": 726228,   "name": "Vici Gaming",       "tag": "VG",        "region": "CN" },
+    { "team_id": 9572001,  "name": "PARIVISION",        "tag": "PV",        "region": "CIS" },
+    { "team_id": 36,       "name": "Natus Vincere",     "tag": "NAVI",      "region": "CIS" },
+    { "team_id": 7554697,  "name": "Nigma Galaxy",      "tag": "NGX",       "region": "ME" },
+    { "team_id": 1883502,  "name": "Virtus.pro",        "tag": "VP",        "region": "CIS" }
+  ]
+}
