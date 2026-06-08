@@ -99,8 +99,8 @@ const BP = {
     const jsonData = await loadCachedOrFetch('heroes_knowledge.json', HEROES_CACHE_KEY);
     this.heroesData = jsonData.heroes; // array, order = matrix row order
     this.positionModifiers = jsonData.position_modifiers || {
-      counter: { mid_vs_mid: 1.8, lane_15_vs_34: 1.5, core_protection: 1.4 },
-      synergy: { lane_15: 1.8, lane_34: 1.8, mid_support: 1.5 },
+      counter: { mid_vs_mid: 1.4, lane_15_vs_34: 1.2, core_protection: 1.2 },
+      synergy: { lane_15: 1.2, lane_34: 1.2, mid_support: 1.2 },
     };
 
     const [counterText, synergyText] = await Promise.all([

@@ -548,6 +548,31 @@ function avatarColorFor(heroId) {
   return colorMap[heroId];
 }
 
+function getStepForAction(team, action, heroId) {
+  const arr = action === 'ban' ? proBPState.bans[team] : proBPState.picks[team];
+  const idx = arr.indexOf(heroId);
+  if (idx === -1) return null;
+  let count = 0;
+  for (let i = 0; i < PRO_BP_STEPS.length; i++) {
+    if (PRO_BP_STEPS[i].team === team && PRO_BP_STEPS[i].action === action) {
+      if (count === idx) return i + 1;
+      count++;
+    }
+  }
+  return null;
+}
+
+function getPickStepForSlot(team, slotIdx) {
+  let count = 0;
+  for (let i = 0; i < PRO_BP_STEPS.length; i++) {
+    if (PRO_BP_STEPS[i].team === team && PRO_BP_STEPS[i].action === 'pick') {
+      if (count === slotIdx) return i + 1;
+      count++;
+    }
+  }
+  return null;
+}
+
 function renderProBPGrid() {
   const grid = document.getElementById('proBPHeroGrid');
   if (!grid || !proBPState) return;
@@ -594,7 +619,7 @@ function renderProBPGrid() {
       badge = '\u{1F6AB}';
     } else if (isPickedByR) {
       cls += ' picked-by-me';
-      badge = '\u2705';
+      badge = '✅';
     } else if (isPickedByD) {
       cls += ' picked-by-enemy';
       badge = '\u{1F534}';
@@ -697,6 +722,7 @@ function updateProBPUI() {
 
   renderProBPBans();
   renderProBPLineups();
+  updateProBPScoreCard();
 
   const countEl = document.getElementById('proBPStepCount');
   if (countEl) countEl.textContent = step + ' / ' + total;
@@ -722,8 +748,11 @@ function renderProBPBans() {
       if (heroId) {
         const url = BP.getHeroAvatarUrl(heroId);
         const name = BP.getHeroName(heroId);
+        const step = getStepForAction(currentTeam, 'ban', heroId);
         html += '<div class="' + cls + '">';
-        html += '<img src="' + url + '" alt="' + name + '" onerror="this.outerHTML=\'<div class=&quot;pro-bp-ban-slot empty&quot;>×</div>\'"><div class="ban-cross">✕</div></div>';
+        html += '<img src="' + url + '" alt="' + name + '" onerror="this.outerHTML=\'<div class=&quot;pro-bp-ban-slot empty&quot;>×</div>\'"><div class="ban-cross">✕</div>';
+        if (step != null) html += '<span class="pro-bp-ban-slot-step">' + step + '</span>';
+        html += '</div>';
       } else {
         if (isCurrentBan && i === bans.length) cls += ' ban-slot-current empty';
         else cls += ' empty';
@@ -740,19 +769,19 @@ function renderProBPBans() {
 function renderProBPLineups() {
   const lineupEl = document.getElementById('proBPLineups');
   if (!lineupEl) return;
-  const renderLineup = (teamLabel, picks) => {
+  const renderLineup = (teamLabel, picks, team) => {
     const padded = picks.slice(0, 5);
     while (padded.length < 5) padded.push('');
     let html = '<div class="pro-bp-lineup"><div class="pro-bp-lineup-label">' + teamLabel + '</div><div class="pro-bp-lineup-slots">';
     padded.forEach((heroId, idx) => {
-      const pos = idx + 1;
+      const slotStep = getPickStepForSlot(team, idx);
       if (heroId) {
         const name = BP.getHeroName(heroId);
         const url = BP.getHeroAvatarUrl(heroId);
-        html += '<div class="pro-bp-lineup-slot picked"><span class="pro-bp-lineup-slot-pos">' + pos + '</span>';
+        html += '<div class="pro-bp-lineup-slot picked"><span class="pro-bp-lineup-slot-pos">' + slotStep + '</span>';
         html += '<img class="pro-bp-lineup-slot-avatar" src="' + url + '" alt="' + name + '" onerror="this.style.display=\'none\'"><span class="pro-bp-lineup-slot-name">' + name + '</span></div>';
       } else {
-        html += '<div class="pro-bp-lineup-slot"><span class="pro-bp-lineup-slot-pos">' + pos + '</span><span class="pro-bp-lineup-slot-empty">待选择</span></div>';
+        html += '<div class="pro-bp-lineup-slot"><span class="pro-bp-lineup-slot-pos">' + slotStep + '</span><span class="pro-bp-lineup-slot-empty">待选择</span></div>';
       }
     });
     html += '</div></div>';
@@ -760,8 +789,46 @@ function renderProBPLineups() {
   };
   const myTeam = proBPState.myTeam;
   const enemyTeam = myTeam === 'R' ? 'D' : 'R';
-  lineupEl.innerHTML = renderLineup(myTeam === 'R' ? '🟢 先选方' : '🔴 后选方', proBPState.picks[myTeam]) +
-    renderLineup(myTeam === 'R' ? '🔴 后选方' : '🟢 先选方', proBPState.picks[enemyTeam]);
+  lineupEl.innerHTML = renderLineup(myTeam === 'R' ? '🟢 先选方' : '🔴 后选方', proBPState.picks[myTeam], myTeam) +
+    renderLineup(myTeam === 'R' ? '🔴 后选方' : '🟢 先选方', proBPState.picks[enemyTeam], enemyTeam);
+}
+
+function updateProBPScoreCard() {
+  const card = document.getElementById('proBPScoreCard');
+  if (!card || !proBPState) return;
+  const rPicks = proBPState.picks.R;
+  const dPicks = proBPState.picks.D;
+  const hasAny = rPicks.length > 0 || dPicks.length > 0;
+  if (!hasAny) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const rScore = BP.getLineupScoreBreakdown(rPicks, dPicks);
+  const dScore = BP.getLineupScoreBreakdown(dPicks, rPicks);
+
+  document.getElementById('proRScoreTotal').textContent = rScore.total.toFixed(1);
+  document.getElementById('proDScoreTotal').textContent = dScore.total.toFixed(1);
+  const gap = rScore.total - dScore.total;
+  const gapEl = document.getElementById('proScoreGap');
+  gapEl.textContent = (gap >= 0 ? '+' : '') + gap.toFixed(1);
+  gapEl.classList.toggle('positive', gap > 0);
+  gapEl.classList.toggle('negative', gap < 0);
+
+  const hintEl = document.getElementById('proScoreHint');
+  if (rPicks.length + dPicks.length < 10) {
+    hintEl.textContent = 'BP 进行中 (' + (rPicks.length + dPicks.length) + '/10 选)';
+  } else {
+    hintEl.textContent = 'BP 完成';
+  }
+
+  const fmt = n => (n >= 0 ? '+' : '') + n.toFixed(1);
+  document.getElementById('proRScoreBreakdown').innerHTML =
+    '<div class="pro-bp-score-breakdown-row"><span>胜率</span><span class="val">' + rScore.winRateScore.toFixed(1) + '</span></div>' +
+    '<div class="pro-bp-score-breakdown-row"><span>配合</span><span class="val">' + fmt(rScore.synergyScore) + '</span></div>' +
+    '<div class="pro-bp-score-breakdown-row"><span>克制</span><span class="val">' + fmt(rScore.counterScore) + '</span></div>';
+  document.getElementById('proDScoreBreakdown').innerHTML =
+    '<div class="pro-bp-score-breakdown-row"><span>胜率</span><span class="val">' + dScore.winRateScore.toFixed(1) + '</span></div>' +
+    '<div class="pro-bp-score-breakdown-row"><span>配合</span><span class="val">' + fmt(dScore.synergyScore) + '</span></div>' +
+    '<div class="pro-bp-score-breakdown-row"><span>克制</span><span class="val">' + fmt(dScore.counterScore) + '</span></div>';
 }
 
 function proBPPrev() {
