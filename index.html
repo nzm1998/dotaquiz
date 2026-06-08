@@ -199,27 +199,6 @@
       </div>
       </div>
 
-      <div class="score-card" id="lineupScoreCard">
-        <div class="score-card-title">🏆 阵容总得分</div>
-        <div class="score-grid">
-          <div class="score-col score-col--my" data-team="my">
-            <div class="score-col-label"><span class="dot dot--my"></span> 我方</div>
-            <div class="score-col-total" id="myScoreTotal">--</div>
-            <div class="score-breakdown" id="myScoreBreakdown"></div>
-          </div>
-          <div class="score-col score-col--gap" data-team="gap">
-            <div class="score-col-label">差距</div>
-            <div class="score-col-total" id="gapScore">--</div>
-            <div class="score-gap-hint" id="gapHint">完成阵容后查看对比</div>
-          </div>
-          <div class="score-col score-col--enemy" data-team="enemy">
-            <div class="score-col-label"><span class="dot dot--enemy"></span> 敌方</div>
-            <div class="score-col-total" id="enemyScoreTotal">--</div>
-            <div class="score-breakdown" id="enemyScoreBreakdown"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- Pro mode: step-by-step BP simulation -->
       <div id="proModePanel" style="display: none;">
         <div class="pro-bp-layout">
@@ -265,26 +244,6 @@
             <div class="pro-bp-hero-grid" id="proBPHeroGrid"></div>
           </div>
         </div>
-        <div class="pro-bp-score-card" id="proBPScoreCard" style="display:none;">
-          <div class="score-card-title">🏆 阵容总得分</div>
-          <div class="score-grid">
-            <div class="score-col score-col--my" data-team="my">
-              <div class="score-col-label"><span class="dot dot--my"></span> 先选方</div>
-              <div class="score-col-total" id="proMyScoreTotal">--</div>
-              <div class="score-breakdown" id="proMyScoreBreakdown"></div>
-            </div>
-            <div class="score-col score-col--gap" data-team="gap">
-              <div class="score-col-label">差距</div>
-              <div class="score-col-total" id="proGapScore">--</div>
-              <div class="score-gap-hint" id="proGapHint">BP 进行中...</div>
-            </div>
-            <div class="score-col score-col--enemy" data-team="enemy">
-              <div class="score-col-label"><span class="dot dot--enemy"></span> 后选方</div>
-              <div class="score-col-total" id="proEnemyScoreTotal">--</div>
-              <div class="score-breakdown" id="proEnemyScoreBreakdown"></div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>  <!-- REPLAY SCREEN (team analysis) -->
@@ -294,20 +253,6 @@
         <h1 class="bp-header-title">🏆 战队分析</h1>
         <p class="bp-header-subtitle">选战队 → 拉最近 20 场 → 位置常驻英雄 + 克制推荐 + 高频眼位热力图</p>
       </header>
-      <div class="bp-mode-tabs" id="bpModeTabs">
-        <button class="bp-mode-tab active" data-mode="casual">天梯模式</button>
-        <button class="bp-mode-tab" data-mode="pro">职业模式</button>
-      </div>
-      <div class="bp-mode-desc" id="bpModeDesc">天梯模式：根据双方阵容自动算出每个位置的克制 / 配合建议</div>
-
-      <header class="bp-header">
-        <h1 class="bp-header-title">⚔️ Dota2 BP 建议工具</h1>
-        <p class="bp-header-subtitle">基于英雄克制与配合关系计算最优阵容</p>
-      </header>
-
-      <div id="bpCasualUI">
-      <div class="lineup-card">
-        <div class="lineup-label my-team"><span>🟢</span> 我方阵容</div>
 
       <div class="replay-input-card team-picker-card">
         <div class="filter-label">精选战队：</div>

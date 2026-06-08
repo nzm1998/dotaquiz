@@ -112,6 +112,22 @@ SYNERGY_MULTIPLIERS: {
 | 🔵 敌方预测 | 敌方可能选择的英雄 |
 | ⚫ 敌方规避 | 敌方可能不会选的英雄 |
 
+### BP推荐布局（5列按位置）
+
+天梯模式推荐区是 **5 列网格**，每列对应一个位置（1号位 / 2号位 / 3号位 / 4号位 / 5号位），每列最多 8 个英雄卡片。已选英雄的位置在对应列显示"已选：XX"。
+
+切换 Tab 时 5 列复用同一份 4 分类结果，列内头像/分数/克制/配合重新计算。
+
+### BP头像来源
+
+**必须用 `BP.getHeroAvatarUrl(heroId)` 拿本地 `assets/avatars/xxx_full.png`，不要写死 CDN URL。**
+
+Cloudflare CDN 的 `_icon.png` 有两个问题：
+1. 新英雄（Muerta、Ringmaster 等）CDN 经常缺图，`<img onerror>` 隐藏后用户看不到头像
+2. `_icon.png` 只有 44×33，本地 `_full.png` 是 256×256
+
+`BP.getHeroAvatarUrl()` 内部读 `heroes_knowledge.json` 里的 `avatarUrl` 字段，已全部预填为本地路径。
+
 ---
 
 ## Firebase 说明
@@ -166,6 +182,11 @@ doc(id: "q1") → subcollection "items"
 
 | 日期 | 文件 | 变更 |
 |------|------|------|
+| 2026-06-07 | scripts/bp.js | 修复 counter 渲染用 `c.score` 报错（应为 `c.net`）+ 5列按位置布局 + 头像改走 `BP.getHeroAvatarUrl` |
+| 2026-06-07 | scripts/bp.js | 职业模式 `proBPHeroGridPanel` 内联 `display: block` 覆盖 CSS `flex`，加 `min-height: 0` 修复滚动 |
+| 2026-06-07 | index.html | 删除 `lineupScoreCard` 和 `proBPScoreCard` 两个阵容得分模块 |
+| 2026-06-07 | style.css | 删除 score card 相关 CSS（.score-card / .score-grid / .pro-bp-score-card 等共 ~150 行） |
+| 2026-06-07 | style.css | 启用已有但未使用的 `.rec-columns` / `.rec-col-*` 列布局样式 |
 | 2026-06-06 | scripts/team.js | 选手个人数据面板 + 眼位坐标范围修正 |
 | 2026-06-06 | style.css | 选手卡片样式 |
 | 2026-06-06 | test_team.js | 端到端测试 (LGD 验证) |
