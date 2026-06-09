@@ -401,9 +401,11 @@ window.selectBPHero = selectBPHero;
 
 let proBPInitialized = false;
 let proBPState = null;
-let proBPFilterMode = 'all'; // 'all' | 'recR' | 'recD'
+let proBPFilterMode = 'all'; // 'all' | 'recR' | 'recD' | 'recByPosR' | 'recByPosD'
 let heroScoresR = {}; // heroId -> total score for Radiant
 let heroScoresD = {}; // heroId -> total score for Dire
+let heroScoresByPosR = { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }; // pos -> heroId -> score for R
+let heroScoresByPosD = { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }; // pos -> heroId -> score for D
 const colorMap = {};
 
 const PRO_BP_STEPS = [
@@ -452,6 +454,8 @@ function initProBP() {
   const allBtn = document.getElementById('proBPFilterAll');
   const rBtn = document.getElementById('proBPFilterR');
   const dBtn = document.getElementById('proBPFilterD');
+  const byPosRBtn = document.getElementById('proBPFilterByPosR');
+  const byPosDBtn = document.getElementById('proBPFilterByPosD');
   const searchInput = document.getElementById('proBPHeroSearch');
   const prevBtn = document.getElementById('proBPPrevBtn');
   const nextBtn = document.getElementById('proBPNextBtn');
@@ -460,6 +464,8 @@ function initProBP() {
   if (allBtn) allBtn.addEventListener('click', () => { proBPFilterMode = 'all'; updateFilterBtns(); renderProBPGrid(); });
   if (rBtn) rBtn.addEventListener('click', () => { proBPFilterMode = 'recR'; updateFilterBtns(); renderProBPGrid(); });
   if (dBtn) dBtn.addEventListener('click', () => { proBPFilterMode = 'recD'; updateFilterBtns(); renderProBPGrid(); });
+  if (byPosRBtn) byPosRBtn.addEventListener('click', () => { proBPFilterMode = 'recByPosR'; updateFilterBtns(); renderProBPGrid(); });
+  if (byPosDBtn) byPosDBtn.addEventListener('click', () => { proBPFilterMode = 'recByPosD'; updateFilterBtns(); renderProBPGrid(); });
   if (searchInput) searchInput.addEventListener('input', () => renderProBPGrid());
 
   if (prevBtn) prevBtn.addEventListener('click', proBPPrev);
@@ -498,9 +504,13 @@ function updateFilterBtns() {
   const allBtn = document.getElementById('proBPFilterAll');
   const rBtn = document.getElementById('proBPFilterR');
   const dBtn = document.getElementById('proBPFilterD');
+  const byPosRBtn = document.getElementById('proBPFilterByPosR');
+  const byPosDBtn = document.getElementById('proBPFilterByPosD');
   if (allBtn) allBtn.classList.toggle('active', proBPFilterMode === 'all');
   if (rBtn) rBtn.classList.toggle('active', proBPFilterMode === 'recR');
   if (dBtn) dBtn.classList.toggle('active', proBPFilterMode === 'recD');
+  if (byPosRBtn) byPosRBtn.classList.toggle('active', proBPFilterMode === 'recByPosR');
+  if (byPosDBtn) byPosDBtn.classList.toggle('active', proBPFilterMode === 'recByPosD');
 }
 
 function proBPStart() {
@@ -523,17 +533,24 @@ function computeHeroScores() {
   if (!proBPState) return;
   heroScoresR = {};
   heroScoresD = {};
+  for (let p = 1; p <= 5; p++) { heroScoresByPosR[p] = {}; heroScoresByPosD[p] = {}; }
   const myLineup = proBPState.picks[proBPState.myTeam].slice(0, 5);
   while (myLineup.length < 5) myLineup.push('');
   const enemyTeam = proBPState.myTeam === 'R' ? 'D' : 'R';
   const enemyLineup = proBPState.picks[enemyTeam].slice(0, 5);
   while (enemyLineup.length < 5) enemyLineup.push('');
+
   for (const hero of bpHeroes) {
     if (!proBPState.available.has(hero.id)) continue;
     const rScore = BP.getCandidateScores(hero.id, myLineup, enemyLineup);
     const dScore = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup);
     heroScoresR[hero.id] = rScore ? rScore.totalStrength : 0;
     heroScoresD[hero.id] = dScore ? dScore.totalStrength : 0;
+    for (let pos = 1; pos <= 5; pos++) {
+      if (!BP.canPlayPosition(hero.id, pos)) continue;
+      heroScoresByPosR[pos][hero.id] = BP.getCandidateScores(hero.id, myLineup, enemyLineup, pos)?.totalStrength ?? 0;
+      heroScoresByPosD[pos][hero.id] = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup, pos)?.totalStrength ?? 0;
+    }
   }
 }
 
@@ -576,6 +593,11 @@ function getPickStepForSlot(team, slotIdx) {
 function renderProBPGrid() {
   const grid = document.getElementById('proBPHeroGrid');
   if (!grid || !proBPState) return;
+
+  if (proBPFilterMode === 'recByPosR' || proBPFilterMode === 'recByPosD') {
+    renderProBPGridByPos(grid, proBPFilterMode === 'recByPosR' ? heroScoresByPosR : heroScoresByPosD);
+    return;
+  }
 
   const search = (document.getElementById('proBPHeroSearch')?.value || '').toLowerCase().trim();
   const def = PRO_BP_STEPS[proBPState.currentStep];
@@ -658,6 +680,72 @@ function renderProBPGrid() {
     if (scoreHtml) html += scoreHtml;
     html += '</div>';
   }
+
+  grid.innerHTML = html;
+}
+
+function renderProBPGridByPos(grid, scoreMapByPos) {
+  const search = (document.getElementById('proBPHeroSearch')?.value || '').toLowerCase().trim();
+  const def = PRO_BP_STEPS[proBPState.currentStep];
+  const isBanTurn = def && def.action === 'ban';
+  const isPickTurn = def && def.action === 'pick';
+  const ended = proBPState.ended;
+
+  computeHeroScores();
+
+  const positionNames = { 1: '1号位', 2: '2号位', 3: '3号位', 4: '4号位', 5: '5号位' };
+
+  const cardHtml = (hero, scoreMap) => {
+    const name = BP.getHeroName(hero.id);
+    const aliases = (hero.alias || []).join(' ');
+    if (search && !(name + ' ' + aliases + ' ' + hero.id).toLowerCase().includes(search)) return null;
+
+    const isAvailable = proBPState.available.has(hero.id);
+    const isBanned = !isAvailable && (proBPState.bans.R.includes(hero.id) || proBPState.bans.D.includes(hero.id));
+    const isPickedByR = proBPState.picks.R.includes(hero.id);
+    const isPickedByD = proBPState.picks.D.includes(hero.id);
+
+    let cls = 'pro-bp-hero-grid-item';
+    let badge = '';
+    if (isBanned) { cls += ' banned'; badge = '\u{1F6AB}'; }
+    else if (isPickedByR) { cls += ' picked-by-me'; badge = '✅'; }
+    else if (isPickedByD) { cls += ' picked-by-enemy'; badge = '\u{1F534}'; }
+    else if (isAvailable && !ended) {
+      if (isBanTurn) cls += ' can-ban';
+      else if (isPickTurn) cls += ' can-pick';
+    } else cls += ' disabled-click';
+
+    const url = BP.getHeroAvatarUrl(hero.id);
+    const initChar = (name || '?').charAt(0);
+    const color = avatarColorFor(hero.id);
+    const avatarHtml = url
+      ? `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}" onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`
+      : `<div class="pro-bp-hero-grid-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
+
+    const score = scoreMap[hero.id] ?? 0;
+    const scoreHtml = `<span class="pro-bp-hero-grid-score">${score.toFixed(1)}</span>`;
+
+    return `<div class="${cls}" data-hero-id="${hero.id}" onclick="onProBPHeroClick('${hero.id}')">${avatarHtml}${badge ? `<span class="pro-bp-hero-grid-badge">${badge}</span>` : ''}<span class="pro-bp-hero-grid-name">${name}</span>${scoreHtml}</div>`;
+  };
+
+  let html = '<div class="pro-bp-pos-columns">';
+  for (let pos = 1; pos <= 5; pos++) {
+    const scoreMapForPos = scoreMapByPos[pos] || {};
+    const list = bpHeroes
+      .filter(h => h.roles && h.roles.includes(pos) && scoreMapForPos[h.id] != null)
+      .sort((a, b) => (scoreMapForPos[b.id] ?? -Infinity) - (scoreMapForPos[a.id] ?? -Infinity));
+
+    const items = list.map(h => cardHtml(h, scoreMapForPos)).filter(Boolean);
+
+    html += `<div class="pro-bp-pos-col"><div class="pro-bp-pos-col-title">${positionNames[pos]}</div><div class="pro-bp-pos-col-list">`;
+    if (items.length === 0) {
+      html += '<div class="pro-bp-pos-col-empty">无</div>';
+    } else {
+      html += items.join('');
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
 
   grid.innerHTML = html;
 }

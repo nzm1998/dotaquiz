@@ -3371,12 +3371,11 @@ body::before {
   align-items: flex-start;
 }
 .pro-bp-panel {
-  flex: 1;
+  flex: 0 0 360px;
   min-width: 0;
-  max-width: 620px;
 }
 .pro-bp-hero-grid-panel {
-  flex: 0 0 360px;
+  flex: 1 1 auto;
   position: sticky;
   top: 80px;
   background: rgba(15,18,30,0.85);
@@ -3731,7 +3730,7 @@ body::before {
   text-align: center;
 }
 .pro-bp-score-card {
-  max-width: 620px;
+  max-width: 360px;
   margin: 12px auto 0;
   padding: 12px 16px;
   background: rgba(255,255,255,0.03);
@@ -4287,6 +4286,71 @@ body::before {
   color: white;
   background: linear-gradient(135deg, var(--accent-red), var(--accent-gold));
   border-color: transparent;
+}
+
+/* Pro BP: 按位置推荐 - 5 列网格 */
+.pro-bp-pos-columns {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding: 4px;
+  align-content: start;
+  grid-column: 1 / -1;
+}
+.pro-bp-pos-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pro-bp-pos-col-title {
+  font-family: var(--font-game);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  text-align: center;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+.pro-bp-pos-col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pro-bp-pos-col-empty {
+  text-align: center;
+  font-size: 11px;
+  color: #606070;
+  font-style: italic;
+  padding: 8px 0;
+}
+.pro-bp-pos-col-list .pro-bp-hero-grid-item {
+  flex-direction: row;
+  gap: 4px;
+  padding: 3px 4px;
+  justify-content: flex-start;
+  text-align: left;
+}
+.pro-bp-pos-col-list .pro-bp-hero-grid-avatar {
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.pro-bp-pos-col-list .pro-bp-hero-grid-name {
+  font-size: 11px;
+  flex: 1;
+  text-align: left;
+  max-width: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pro-bp-pos-col-list .pro-bp-hero-grid-score {
+  font-size: 10px;
+  color: #f0a500;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 
