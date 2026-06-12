@@ -599,8 +599,8 @@ function computeHeroScores() {
     heroScoresD[hero.id] = dScore ? dScore.totalStrength : 0;
     for (let pos = 1; pos <= 5; pos++) {
       if (!BP.canPlayPosition(hero.id, pos)) continue;
-      heroScoresByPosR[pos][hero.id] = BP.getCandidateScores(hero.id, myLineup, enemyLineup)?.totalStrength ?? 0;
-      heroScoresByPosD[pos][hero.id] = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup)?.totalStrength ?? 0;
+      heroScoresByPosR[pos][hero.id] = rScore ? rScore.totalStrength : 0;
+      heroScoresByPosD[pos][hero.id] = dScore ? dScore.totalStrength : 0;
     }
   }
 }

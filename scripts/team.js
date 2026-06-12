@@ -961,7 +961,7 @@ function modeOrNull(arr) {
 }
 
 // ==================== WARD AGGREGATION ====================
-// 假眼(obs) + 真眼(sen) 全部放上去，不设 top-N 过滤，直接看全局密集度
+// 假眼(obs) 观察数据
 function aggregateWardsBySide(matches, rosterSet) {
   const radMap = {};
   const direMap = {};

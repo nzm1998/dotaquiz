@@ -596,11 +596,16 @@ body::before {
   opacity: 0.4;
 }
 
-/* Screen containers */
+/* Screen containers
+ * quiz/replay must mirror bp's internal-scroll pattern (height: 100vh +
+ * overflow-y: auto). If body itself scrolls, Chromium's hit-test sends mouse
+ * clicks past the position: fixed nav/audio buttons and into <body>, even
+ * though they render on top — see PR notes for the repro.
+ */
 #home-screen { display: block; }
-#quiz-screen { display: none; }
+#quiz-screen { display: none; height: 100vh; overflow-y: auto; }
 #bp-screen { display: none; height: 100vh; overflow-y: auto; padding-top: 64px; }
-#replay-screen { display: none; }
+#replay-screen { display: none; height: 100vh; overflow-y: auto; }
 
 /* Module card "new" accent */
 .module-card--new { position: relative; }

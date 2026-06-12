@@ -20,7 +20,6 @@ nzmdota2project_v2/
 ├── bp_agent.js         # BP算法核心（位置感知加权计算）
 ├── questions.json      # 题库（20道题）
 ├── heroes_knowledge.json  # 英雄知识数据
-├── firebase-config.js # Firebase配置
 └── style.css          # 全局样式
 ```
 
