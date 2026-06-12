@@ -164,18 +164,7 @@ function selectDifficulty(difficulty) {
   currentIndex = 0;
   correctCount = 0;
   answeredQuestions = {};
-  hideLanding();
   renderQuestion();
-}
-
-function hideLanding() {
-  document.querySelector('.nav').style.display = 'none';
-  document.querySelector('.audio-controls').style.display = 'none';
-}
-
-function showLanding() {
-  document.querySelector('.nav').style.display = 'flex';
-  document.querySelector('.audio-controls').style.display = 'flex';
 }
 
 function renderQuestion() {
@@ -355,8 +344,15 @@ function renderResult() {
 
 function quizBackToHome() {
   const app = document.getElementById('quiz-screen');
-  app.innerHTML = '';
-  showLanding();
+  // Restore the loading skeleton (not empty) so a later return to #quiz
+  // shows the spinner immediately, instead of a black flash before initQuiz
+  // re-runs.
+  app.innerHTML = `
+    <div class="quiz-loading">
+      <div class="quiz-loading-spinner"></div>
+      <div class="quiz-loading-text">加载中...</div>
+    </div>
+  `;
   window.navigate('home');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
