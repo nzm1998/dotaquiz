@@ -183,6 +183,8 @@ doc(id: "q1") → subcollection "items"
 | 日期 | 文件 | 变更 |
 |------|------|------|
 | 2026-06-07 | scripts/bp.js | 修复 counter 渲染用 `c.score` 报错（应为 `c.net`）+ 5列按位置布局 + 头像改走 `BP.getHeroAvatarUrl` |
+| 2026-06-10 | bp_agent.js | 修正 synergy 矩阵读取：对称矩阵只存一次，`(ab+ba)/2` → `ab\|\|ba`，避免空值被除 2 砍半 |
+| 2026-06-10 | scripts/bp.js | 选人下拉头像从 CDN 改为走 `BP.getHeroAvatarUrl` 本地图片 |
 | 2026-06-07 | scripts/bp.js | 职业模式 `proBPHeroGridPanel` 内联 `display: block` 覆盖 CSS `flex`，加 `min-height: 0` 修复滚动 |
 | 2026-06-07 | index.html | 删除 `lineupScoreCard` 和 `proBPScoreCard` 两个阵容得分模块 |
 | 2026-06-07 | style.css | 删除 score card 相关 CSS（.score-card / .score-grid / .pro-bp-score-card 等共 ~150 行） |

@@ -10,8 +10,8 @@ let currentDifficulty = 'beginner';
 let answeredQuestions = {};
 
 const DIFFICULTIES = {
-  beginner: { name: '初学者', icon: '🌱', info: '每轮5题，优先抽取未答题', shuffleRatio: 0 },
-  veteran: { name: '老刀斯林', icon: '⚔️', info: '每轮5题，高难度题目比例更高', shuffleRatio: 0.7 }
+  beginner: { name: '初学者', icon: '🌱', info: '每轮5题，优先抽取未答题' },
+  veteran: { name: '老刀斯林', icon: '⚔️', info: '每轮5题，高难度题目比例更高' }
 };
 
 const TITLES = [
@@ -23,10 +23,6 @@ const TITLES = [
   { min: 0, rank: '💀', title: '云玩家本云', quote: '你怕不是只看过视频吧？连Dota2都没安装就来答题了？' }
 ];
 
-let accuracyCache = {};
-const ACCURACY_CACHE_DURATION = 24 * 60 * 60 * 1000;
-let accuracyLoadFailed = false;
-let commentsUnsubscribe = null;
 
 function getTitle(percent) {
   for (const t of TITLES) {
@@ -35,66 +31,12 @@ function getTitle(percent) {
   return TITLES[TITLES.length - 1];
 }
 
-async function loadAccuracyCache() {
-  const now = Date.now();
-  const lastLoad = sessionStorage.getItem('accuracy_last_load');
-
-  if (lastLoad && (now - parseInt(lastLoad)) < ACCURACY_CACHE_DURATION && !accuracyLoadFailed) {
-    const cached = sessionStorage.getItem('accuracy_cache');
-    if (cached) {
-      accuracyCache = JSON.parse(cached);
-      return;
-    }
-  }
-
-  try {
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Firestore timeout')), 5000);
-    });
-
-    if (typeof statsCollection === 'undefined' || !statsCollection || typeof statsCollection.get !== 'function') {
-      throw new Error('Firestore not available');
-    }
-    const snapshot = await Promise.race([statsCollection.get(), timeoutPromise]);
-
-    accuracyCache = {};
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      accuracyCache[doc.id] = { correct: data.correct || 0, total: data.total || 0, lastUpdated: now };
-    });
-    sessionStorage.setItem('accuracy_cache', JSON.stringify(accuracyCache));
-    sessionStorage.setItem('accuracy_last_load', now.toString());
-  } catch (e) {
-    console.warn('Failed to load accuracy stats:', e.message);
-    accuracyCache = {};
-    accuracyLoadFailed = true;
-  }
-}
-
-function getAccuracy(questionId) {
-  const data = accuracyCache[questionId];
-  if (!data || data.total === 0) return null;
-  return Math.round((data.correct / data.total) * 100);
-}
-
-async function recordAnswer(questionId, selectedOption, isCorrect) {
-  answersCollection.add({
-    questionId: questionId,
-    selectedOption: selectedOption,
-    isCorrect: isCorrect,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(e => console.error('Failed to record answer:', e));
-
-  const statsRef = statsCollection.doc(questionId.toString());
-  statsRef.set({
-    correct: firebase.firestore.FieldValue.increment(isCorrect ? 1 : 0),
-    total: firebase.firestore.FieldValue.increment(1)
-  }, { merge: true }).catch(e => console.error('Failed to update stats:', e));
-}
-
 async function loadQuestions(retryCount = 0) {
   try {
-    const res = await fetch('questions.json', { cache: 'no-cache' });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('questions.json', { cache: 'no-cache', signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     allQuestions = data.questions;
@@ -124,18 +66,6 @@ function shuffleArray(arr) {
   return a;
 }
 
-// 打乱选项但保留答案信息
-function shuffleArrayWithAnswer(options, correctIndex) {
-  const indexed = options.map((text, i) => ({ text, isCorrect: i === correctIndex }));
-  const shuffled = shuffleArray(indexed);
-  return shuffled;
-}
-
-// 获取打乱后的正确选项索引
-function getShuffledCorrectIndex(shuffledOptions) {
-  return shuffledOptions.findIndex(opt => opt.isCorrect);
-}
-
 function getAnsweredQuestions() {
   const data = sessionStorage.getItem('answered_questions');
   return data ? JSON.parse(data) : [];
@@ -151,10 +81,24 @@ function markQuestionAnswered(questionId) {
 
 function getNextBatchQuestions(allQs, difficulty, count = QUESTIONS_PER_ROUND) {
   const answered = getAnsweredQuestions();
-  const unanswered = allQs.filter(q => !answered.includes(q.id));
-  const answeredPool = allQs.filter(q => answered.includes(q.id));
-  let pool = unanswered.length >= count ? unanswered : [...unanswered, ...answeredPool];
-  const shuffled = shuffleArray(pool);
+
+  // 根据难度过滤合适题目
+  let pool;
+  if (difficulty === 'beginner') {
+    // 初学者：优先抽取"新入坑玩家"类别，不足时从"老刀斯林"补
+    const easyQs = allQs.filter(q => q.category === '新入坑玩家');
+    pool = easyQs.length > 0 ? easyQs : allQs;
+  } else {
+    // 老刀斯林：从"老刀斯林"类别抽取
+    const hardQs = allQs.filter(q => q.category === '老刀斯林');
+    pool = hardQs.length > 0 ? hardQs : allQs;
+  }
+
+  // 优先取未答过的
+  const unanswered = pool.filter(q => !answered.includes(q.id));
+  const answeredPool = pool.filter(q => answered.includes(q.id));
+  const selectedPool = unanswered.length >= count ? unanswered : [...unanswered, ...answeredPool];
+  const shuffled = shuffleArray(selectedPool);
   return shuffled.slice(0, count).map(q => ({ ...q, _answer: q.answer }));
 }
 
@@ -167,10 +111,8 @@ async function initQuiz() {
     </div>
   `;
 
-  // 题目必须加载完才显示，但正确率缓存可以后台加载
+  // 题目必须加载完才显示
   await loadQuestions();
-  // 正确率缓存后台加载，不阻塞UI
-  loadAccuracyCache().catch(() => {});
 
   if (allQuestions.length > 0) {
     showDifficultySelection();
@@ -218,7 +160,7 @@ function selectDifficulty(difficulty) {
   }
 
   currentDifficulty = difficulty;
-  questions = getNextBatchQuestions([...allQuestions], difficulty, QUESTIONS_PER_ROUND);
+  questions = getNextBatchQuestions(allQuestions, difficulty, QUESTIONS_PER_ROUND);
   currentIndex = 0;
   correctCount = 0;
   answeredQuestions = {};
@@ -242,9 +184,8 @@ function renderQuestion() {
   const difficultyName = DIFFICULTIES[currentDifficulty].name;
 
   // 选项保持原顺序 abcd，不乱序
-  const correctIndex = q._answer;
   const optionsHtml = q.options.map((text, i) => `
-    <div class="option" data-index="${i}" ${i === correctIndex ? 'data-correct="true"' : ''}>
+    <div class="option" data-index="${i}">
       <span class="option-indicator">${OPTION_LETTERS[i]}</span>
       <span class="option-text">${text}</span>
     </div>
@@ -284,7 +225,7 @@ function renderQuestion() {
               </div>
               <div class="feedback-stats" id="feedbackStats"></div>
             </div>
-            <button class="next-btn" id="nextBtn">
+            <button class="next-btn" id="nextBtn" disabled>
               ${currentIndex < questions.length - 1 ? '下一题' : '查看结果'}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -307,8 +248,7 @@ function renderQuestion() {
 
 function restoreAnsweredState(q, answerData) {
   const options = document.querySelectorAll('.option');
-  const correctOption = document.querySelector('.option[data-correct="true"]');
-  const correctIdx = correctOption ? parseInt(correctOption.dataset.index) : -1;
+  const correctIdx = q._answer;
   const { selectedIndex, isCorrect } = answerData;
 
   options.forEach((opt, i) => {
@@ -317,18 +257,14 @@ function restoreAnsweredState(q, answerData) {
     else if (i === selectedIndex && !isCorrect) opt.classList.add('wrong');
   });
 
+  document.getElementById('nextBtn').disabled = false;
+
   const feedback = document.getElementById('feedback');
   feedback.className = `feedback show ${isCorrect ? 'correct' : 'wrong'}`;
   document.getElementById('feedbackIcon').textContent = isCorrect ? '✓' : '✗';
   document.getElementById('feedbackTitle').textContent = isCorrect ? '回答正确！' : '回答错误';
 
-  const accuracy = getAccuracy(q.id);
-  if (accuracy !== null) {
-    document.getElementById('feedbackStats').innerHTML = `本题正确率：<strong>${accuracy}%</strong>`;
-  }
-
   document.getElementById('nextBtn').classList.add('show');
-  renderCommentCollapsed(q.id);
 }
 
 function attachOptionListeners() {
@@ -342,12 +278,14 @@ async function handleAnswer(selectedIndex) {
 
   const q = questions[currentIndex];
   const options = document.querySelectorAll('.option');
-  const correctOption = document.querySelector('.option[data-correct="true"]');
-  const correctIdx = correctOption ? parseInt(correctOption.dataset.index) : -1;
+  const correctIdx = q._answer;
   const isCorrect = selectedIndex === correctIdx;
 
-  window.playCorrectSound && window.playCorrectSound();
-  if (!isCorrect) window.playWrongSound && window.playWrongSound();
+  if (isCorrect) {
+    window.playCorrectSound && window.playCorrectSound();
+  } else {
+    window.playWrongSound && window.playWrongSound();
+  }
 
   options.forEach((opt, i) => {
     opt.classList.add('disabled');
@@ -357,8 +295,8 @@ async function handleAnswer(selectedIndex) {
 
   if (isCorrect) correctCount++;
   answeredQuestions[q.id] = { selectedIndex, isCorrect };
-  recordAnswer(q.id, selectedIndex, isCorrect);
   showFeedback(isCorrect, q.id);
+  document.getElementById('nextBtn').disabled = false;
 }
 
 async function showFeedback(isCorrect, questionId) {
@@ -367,152 +305,7 @@ async function showFeedback(isCorrect, questionId) {
   document.getElementById('feedbackIcon').textContent = isCorrect ? '✓' : '✗';
   document.getElementById('feedbackTitle').textContent = isCorrect ? '回答正确！' : '回答错误';
 
-  const accuracy = getAccuracy(questionId);
-  if (accuracy !== null) {
-    document.getElementById('feedbackStats').innerHTML = `本题正确率：<strong>${accuracy}%</strong>`;
-  }
-
   document.getElementById('nextBtn').classList.add('show');
-  renderCommentCollapsed(questionId);
-}
-
-function renderCommentCollapsed(questionId) {
-  const feedbackEl = document.getElementById('feedback');
-  const wrap = document.createElement('div');
-  wrap.className = 'comment-section comment-collapsed';
-  wrap.innerHTML = `
-    <button type="button" class="comment-toggle" id="commentToggle">
-      💬 查看讨论区
-      <span class="comment-toggle-hint">（评论走 Firestore 实时同步，首次可能较慢）</span>
-    </button>
-  `;
-  feedbackEl.appendChild(wrap);
-  document.getElementById('commentToggle').addEventListener('click', () => {
-    wrap.remove();
-    renderCommentSection(questionId);
-  }, { once: true });
-}
-
-async function renderCommentSection(questionId) {
-  if (commentsUnsubscribe) {
-    commentsUnsubscribe();
-    commentsUnsubscribe = null;
-  }
-
-  const feedbackEl = document.getElementById('feedback');
-  const commentSection = document.createElement('div');
-  commentSection.className = 'comment-section';
-  commentSection.innerHTML = `
-    <div class="comment-header">💬 讨论区 <span style="color:var(--mute);font-weight:400">(实时)</span></div>
-    <div class="comment-form">
-      <input type="text" class="comment-input" id="commentInput" placeholder="写下你的看法..." maxlength="200">
-      <button class="comment-submit" id="commentSubmit">发送</button>
-    </div>
-    <div class="comments-list" id="commentsList">
-      <div class="comment-empty">加载中...</div>
-    </div>
-  `;
-  feedbackEl.appendChild(commentSection);
-
-  document.getElementById('commentSubmit').addEventListener('click', () => submitComment(questionId));
-  document.getElementById('commentInput').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') submitComment(questionId);
-  });
-
-  const listEl = document.getElementById('commentsList');
-  const cacheKey = 'comments_cache_v1_' + questionId;
-
-  // 1) Paint cached comments immediately (instant on repeat visits; first visit falls through to "加载中…").
-  try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        renderCommentsData(listEl, parsed);
-      } else {
-        listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
-      }
-    }
-  } catch (e) { /* ignore cache errors */ }
-
-  // 2) Subscribe to live updates; the initial snapshot may still take a while
-  //    on the very first visit, but subsequent visits are served from the cache.
-  const commentsRef = commentsCollection.doc(questionId.toString()).collection('items');
-  commentsUnsubscribe = commentsRef
-    .orderBy('timestamp', 'desc')
-    .limit(20)
-    .onSnapshot((snapshot) => {
-      if (!listEl) return;
-
-      if (snapshot.empty) {
-        try { localStorage.setItem(cacheKey, '[]'); } catch (e) {}
-        listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
-        return;
-      }
-
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (e) {}
-      renderCommentsData(listEl, data);
-    }, (error) => {
-      console.error('Comments listener error:', error);
-      if (listEl && !listEl.querySelector('.comment-item')) {
-        listEl.innerHTML = '<div class="comment-empty">评论加载失败，请稍后重试</div>';
-      }
-    });
-}
-
-function renderCommentsData(listEl, data) {
-  if (!listEl) return;
-  if (!data || data.length === 0) {
-    listEl.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧</div>';
-    return;
-  }
-  listEl.innerHTML = '';
-  data.forEach(comment => {
-    const time = comment.timestamp && comment.timestamp.toDate
-      ? new Date(comment.timestamp.toDate()).toLocaleString('zh-CN')
-      : (comment.timestamp && comment.timestamp._seconds
-          ? new Date(comment.timestamp._seconds * 1000).toLocaleString('zh-CN')
-          : '刚刚');
-    listEl.innerHTML += `
-      <div class="comment-item">
-        <div class="comment-meta">
-          <span class="comment-author">${escapeHtml(comment.author || '匿名')}</span>
-          <span class="comment-time">${time}</span>
-        </div>
-        <div class="comment-text">${escapeHtml(comment.text)}</div>
-      </div>
-    `;
-  });
-}
-
-function submitComment(questionId) {
-  const input = document.getElementById('commentInput');
-  const submitBtn = document.getElementById('commentSubmit');
-  const text = input.value.trim();
-  if (!text) return;
-
-  submitBtn.disabled = true;
-  const commentsRef = commentsCollection.doc(questionId.toString()).collection('items');
-  commentsRef.add({
-    text: text,
-    author: generateAnonName(),
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(() => { input.value = ''; })
-    .catch((e) => { console.error('Failed to submit comment:', e); alert('发送失败，请重试'); })
-    .finally(() => { submitBtn.disabled = false; });
-}
-
-function generateAnonName() {
-  const adjectives = ['快乐的', '神秘的', '勇敢的', '智慧的', '友善的', '帅气的'];
-  const nouns = ['刀斯林', '玩家', '老铁', '道友', '水友', '粉丝'];
-  return adjectives[Math.floor(Math.random() * adjectives.length)] + nouns[Math.floor(Math.random() * nouns.length)];
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function prevQuestion() {
@@ -523,6 +316,7 @@ function prevQuestion() {
 }
 
 function nextQuestion() {
+  if (!answeredQuestions[questions[currentIndex]?.id]) return;
   markQuestionAnswered(questions[currentIndex].id);
   currentIndex++;
   if (currentIndex >= questions.length) {
@@ -536,11 +330,6 @@ function renderResult() {
   const app = document.getElementById('quiz-screen');
   const percent = Math.round((correctCount / questions.length) * 100);
   const titleData = getTitle(percent);
-
-  if (commentsUnsubscribe) {
-    commentsUnsubscribe();
-    commentsUnsubscribe = null;
-  }
 
   app.innerHTML = `
     <div class="result-screen">
@@ -565,11 +354,6 @@ function renderResult() {
 }
 
 function quizBackToHome() {
-  if (commentsUnsubscribe) {
-    commentsUnsubscribe();
-    commentsUnsubscribe = null;
-  }
-
   const app = document.getElementById('quiz-screen');
   app.innerHTML = '';
   showLanding();

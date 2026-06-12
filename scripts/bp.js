@@ -1,9 +1,18 @@
 // ==================== BP MODULE ====================
-let bpInitialized = false;
 let bpHeroes = [];
+let sortedHeroes = [];
 let myLineup = ['', '', '', '', ''];
 let enemyLineup = ['', '', '', '', ''];
 let currentBPTab = 'recommended'; // recommended, notRecommended, enemyRecommended, enemyNotRecommended
+
+// 简单的防抖函数
+function debounce(fn, delay = 300) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
 
 // Tab configuration
 const BP_TABS = [
@@ -14,9 +23,6 @@ const BP_TABS = [
 ];
 
 async function initBP() {
-  if (bpInitialized) return;
-  bpInitialized = true;
-
   // 先立即显示UI骨架，避免白屏
   renderBPSelectsSkeleton();
 
@@ -29,16 +35,19 @@ async function initBP() {
   }
 
   bpHeroes = BP.getAllHeroes();
+  sortedHeroes = bpHeroes.slice().sort((a, b) =>
+    (BP.getHeroName(a.id) || '').localeCompare(BP.getHeroName(b.id) || ''));
   renderBPSelects();
   initProBP();
 
-  // 位置筛选/开关变化时自动重新计算
-  document.getElementById('myPosition').addEventListener('change', () => {
-    if (myLineup.some(id => id !== '') || enemyLineup.some(id => id !== '')) calculateBP();
-  });
-  document.getElementById('positionFilterToggle').addEventListener('change', () => {
-    if (myLineup.some(id => id !== '') || enemyLineup.some(id => id !== '')) calculateBP();
-  });
+  // 位置筛选变化时自动重新计算（只在第一次初始化时绑定）
+  const posEl = document.getElementById('myPosition');
+  if (posEl && !posEl.dataset.bpBound) {
+    posEl.dataset.bpBound = '1';
+    posEl.addEventListener('change', () => {
+      if (myLineup.some(id => id !== '') || enemyLineup.some(id => id !== '')) calculateBP();
+    });
+  }
 }
 
 
@@ -78,7 +87,7 @@ function renderBPSelects() {
     const menu = dropdown.querySelector('.hero-dropdown-menu');
 
     input.addEventListener('focus', () => showBPDropdown(dropdown));
-    input.addEventListener('input', () => filterBPDropdown(dropdown, input.value));
+    input.addEventListener('input', debounce(() => filterBPDropdown(dropdown, input.value)));
     input.addEventListener('keydown', (e) => handleBPKeydown(e, dropdown));
     document.addEventListener('click', (e) => {
       if (!dropdown.contains(e.target)) {
@@ -115,25 +124,43 @@ function showBPDropdown(dropdown) {
 function filterBPDropdown(dropdown, query) {
   const menu = dropdown.querySelector('.hero-dropdown-menu');
   const results = searchHeroes(query);
+  const input = dropdown.querySelector('.hero-dropdown-input');
 
   const allSelected = [...myLineup, ...enemyLineup].filter(id => id && id !== '');
   const selectedSet = new Set(allSelected);
 
   if (results.length === 0) {
-    menu.innerHTML = '<div class="hero-dropdown-empty">未找到英雄</div>';
+    // If slot has a selection, still show clear option even with no results
+    if (input.dataset.selected) {
+      menu.innerHTML = `<div class="hero-dropdown-item hero-dropdown-clear" onclick="clearBPHero(this)">
+        <span class="hero-dropdown-clear-icon">✕</span>
+        <span class="hero-dropdown-item-name" style="color:var(--mute);">取消选择</span>
+      </div><div class="hero-dropdown-empty">未找到英雄</div>`;
+    } else {
+      menu.innerHTML = '<div class="hero-dropdown-empty">未找到英雄</div>';
+    }
     return;
   }
 
-  menu.innerHTML = results
+  // If this slot already has a hero selected, add a "clear" option at top
+  let clearHtml = '';
+  if (input.dataset.selected) {
+    clearHtml = `<div class="hero-dropdown-item hero-dropdown-clear" onclick="clearBPHero(this)">
+      <span class="hero-dropdown-clear-icon">✕</span>
+      <span class="hero-dropdown-item-name" style="color:var(--mute);">取消选择</span>
+    </div>`;
+  }
+
+  menu.innerHTML = clearHtml + results
     .map(hero => {
       const isDisabled = selectedSet.has(hero.id);
       const heroKey = hero.id.replace('npc_dota_hero_', '');
-      const avatarUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
+      const avatarUrl = BP.getHeroAvatarUrl(hero.id) || `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
       return `
         <div class="hero-dropdown-item ${isDisabled ? 'disabled' : ''}"
              data-hero-id="${hero.id}"
              ${isDisabled ? '' : 'onclick="selectBPHero(this)"'}>
-          <img class="hero-dropdown-item-avatar" src="${avatarUrl}" alt="${hero.name || BP.getHeroName(hero.id) || heroKey}" onerror="this.style.display='none'">
+          <img class="hero-dropdown-item-avatar" src="${avatarUrl}" alt="${hero.name || BP.getHeroName(hero.id) || heroKey}" loading="lazy" onerror="this.style.display='none'">
           <span class="hero-dropdown-item-name">${hero.name || BP.getHeroName(hero.id) || heroKey}</span>
           ${hero.alias ? `<span class="hero-dropdown-item-alias">${hero.alias}</span>` : ''}
         </div>
@@ -164,8 +191,12 @@ function handleBPKeydown(e, dropdown) {
     }
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (current && !current.classList.contains('disabled')) {
-      selectBPHero(current);
+    if (current) {
+      if (current.classList.contains('hero-dropdown-clear')) {
+        clearBPHero(current);
+      } else if (!current.classList.contains('disabled')) {
+        selectBPHero(current);
+      }
     } else if (items.length > 0) {
       items.forEach(i => i.classList.remove('highlighted'));
       if (!current || current.classList.contains('disabled')) {
@@ -185,12 +216,13 @@ function selectBPHero(element) {
 
   const hero = bpHeroes.find(h => h.id === heroId);
 
-  const heroKey = heroId.replace('npc_dota_hero_', '');
-  const avatarUrl = `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/heroes/${heroKey}_icon.png`;
   const heroName = hero ? (hero.name || BP.getHeroName(hero.id) || '') : '';
   input.value = heroName;
   input.dataset.selected = heroId;
-  input.style.backgroundImage = `url(${avatarUrl})`;
+  const localAvatar = BP.getHeroAvatarUrl(heroId);
+  if (localAvatar) {
+    input.style.backgroundImage = `url(${localAvatar})`;
+  }
   input.style.backgroundSize = '24px 24px';
   input.style.backgroundRepeat = 'no-repeat';
   input.style.backgroundPosition = '8px center';
@@ -210,6 +242,35 @@ function selectBPHero(element) {
   menu.classList.remove('open');
   updateBPSelectDisables();
   // 自动触发计算推荐
+  calculateBP();
+}
+
+function clearBPHero(element) {
+  const dropdown = element.closest('.hero-dropdown');
+  const input = dropdown.querySelector('.hero-dropdown-input');
+  const menu = dropdown.querySelector('.hero-dropdown-menu');
+
+  input.value = '';
+  input.dataset.selected = '';
+  input.style.backgroundImage = '';
+  input.style.paddingLeft = '';
+  input.style.backgroundSize = '';
+  input.style.backgroundRepeat = '';
+  input.style.backgroundPosition = '';
+  input.classList.remove('has-value');
+
+  const team = dropdown.dataset.team;
+  const position = parseInt(dropdown.dataset.position);
+  const posIndex = position - 1;
+
+  if (team === 'my') {
+    myLineup[posIndex] = '';
+  } else {
+    enemyLineup[posIndex] = '';
+  }
+
+  menu.classList.remove('open');
+  updateBPSelectDisables();
   calculateBP();
 }
 
@@ -299,13 +360,9 @@ function renderBPResultsWithTabs(allResults) {
     const localAvatar = BP.getHeroAvatarUrl(rec.heroId);
     const name = rec.name || BP.getHeroName(rec.heroId) || rec.heroId.replace('npc_dota_hero_', '');
     const initChar = (name || '?').charAt(0);
-    const color = (function(){
-      let h = 0;
-      for (let i = 0; i < rec.heroId.length; i++) h = rec.heroId.charCodeAt(i) + ((h << 5) - h);
-      return '#' + (h & 0x00FFFFFF).toString(16).toUpperCase().padStart(6, '0');
-    })();
+    const color = avatarColorFor(rec.heroId);
     const avatarHtml = localAvatar
-      ? `<img class="rec-col-avatar" src="${localAvatar}" alt="${name}" onerror="this.outerHTML='<div class=&quot;rec-col-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`
+      ? `<img class="rec-col-avatar" src="${localAvatar}" alt="${name}" loading="lazy" onerror="this.outerHTML='<div class=&quot;rec-col-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`
       : `<div class="rec-col-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
 
     const countersHtml = (rec.counters || []).slice(0, 3).map(c => {
@@ -382,18 +439,6 @@ function renderBPResultsWithTabs(allResults) {
   });
 }
 
-// Legacy function for compatibility
-function renderBPResults(recommendations) {
-  renderBPResultsWithTabs({
-    recommended: recommendations,
-    notRecommended: {},
-    enemyRecommended: {},
-    enemyNotRecommended: {}
-  });
-}
-
-
-// Expose functions globally
 window.initBP = initBP;
 window.calculateBP = calculateBP;
 window.selectBPHero = selectBPHero;
@@ -466,7 +511,7 @@ function initProBP() {
   if (dBtn) dBtn.addEventListener('click', () => { proBPFilterMode = 'recD'; updateFilterBtns(); renderProBPGrid(); });
   if (byPosRBtn) byPosRBtn.addEventListener('click', () => { proBPFilterMode = 'recByPosR'; updateFilterBtns(); renderProBPGrid(); });
   if (byPosDBtn) byPosDBtn.addEventListener('click', () => { proBPFilterMode = 'recByPosD'; updateFilterBtns(); renderProBPGrid(); });
-  if (searchInput) searchInput.addEventListener('input', () => renderProBPGrid());
+  if (searchInput) searchInput.addEventListener('input', debounce(() => renderProBPGrid(), 250));
 
   if (prevBtn) prevBtn.addEventListener('click', proBPPrev);
   if (nextBtn) nextBtn.addEventListener('click', proBPNext);
@@ -524,21 +569,27 @@ function proBPStart() {
 }
 
 function getDisplayedHeroes() {
-  if (!bpHeroes.length) return [];
-  return bpHeroes.slice().sort((a, b) =>
-    (BP.getHeroName(a.id) || '').localeCompare(BP.getHeroName(b.id) || ''));
+  return sortedHeroes;
 }
+
+let lastComputedLineupHash = '';
 
 function computeHeroScores() {
   if (!proBPState) return;
-  heroScoresR = {};
-  heroScoresD = {};
-  for (let p = 1; p <= 5; p++) { heroScoresByPosR[p] = {}; heroScoresByPosD[p] = {}; }
   const myLineup = proBPState.picks[proBPState.myTeam].slice(0, 5);
   while (myLineup.length < 5) myLineup.push('');
   const enemyTeam = proBPState.myTeam === 'R' ? 'D' : 'R';
   const enemyLineup = proBPState.picks[enemyTeam].slice(0, 5);
   while (enemyLineup.length < 5) enemyLineup.push('');
+
+  // 阵容没变则跳过重复计算
+  const hash = myLineup.join(',') + '|' + enemyLineup.join(',') + '|' + (proBPState.available.size);
+  if (hash === lastComputedLineupHash) return;
+  lastComputedLineupHash = hash;
+
+  heroScoresR = {};
+  heroScoresD = {};
+  for (let p = 1; p <= 5; p++) { heroScoresByPosR[p] = {}; heroScoresByPosD[p] = {}; }
 
   for (const hero of bpHeroes) {
     if (!proBPState.available.has(hero.id)) continue;
@@ -548,8 +599,8 @@ function computeHeroScores() {
     heroScoresD[hero.id] = dScore ? dScore.totalStrength : 0;
     for (let pos = 1; pos <= 5; pos++) {
       if (!BP.canPlayPosition(hero.id, pos)) continue;
-      heroScoresByPosR[pos][hero.id] = BP.getCandidateScores(hero.id, myLineup, enemyLineup, pos)?.totalStrength ?? 0;
-      heroScoresByPosD[pos][hero.id] = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup, pos)?.totalStrength ?? 0;
+      heroScoresByPosR[pos][hero.id] = BP.getCandidateScores(hero.id, myLineup, enemyLineup)?.totalStrength ?? 0;
+      heroScoresByPosD[pos][hero.id] = BP.getCandidateScoresForEnemy(hero.id, myLineup, enemyLineup)?.totalStrength ?? 0;
     }
   }
 }
@@ -661,7 +712,7 @@ function renderProBPGrid() {
 
     let avatarHtml;
     if (url) {
-      avatarHtml = `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}"
+      avatarHtml = `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}" loading="lazy"
            onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`;
     } else {
       avatarHtml = `<div class="pro-bp-hero-grid-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
@@ -719,7 +770,7 @@ function renderProBPGridByPos(grid, scoreMapByPos) {
     const initChar = (name || '?').charAt(0);
     const color = avatarColorFor(hero.id);
     const avatarHtml = url
-      ? `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}" onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`
+      ? `<img class="pro-bp-hero-grid-avatar" src="${url}" alt="${name}" loading="lazy" onerror="this.outerHTML='<div class=&quot;pro-bp-hero-grid-avatar avatar-fallback&quot; style=&quot;background:${color};&quot;>${initChar}</div>'">`
       : `<div class="pro-bp-hero-grid-avatar avatar-fallback" style="background:${color};">${initChar}</div>`;
 
     const score = scoreMap[hero.id] ?? 0;
@@ -838,7 +889,7 @@ function renderProBPBans() {
         const name = BP.getHeroName(heroId);
         const step = getStepForAction(currentTeam, 'ban', heroId);
         html += '<div class="' + cls + '">';
-        html += '<img src="' + url + '" alt="' + name + '" onerror="this.outerHTML=\'<div class=&quot;pro-bp-ban-slot empty&quot;>×</div>\'"><div class="ban-cross">✕</div>';
+        html += '<img src="' + url + '" alt="' + name + '" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;pro-bp-ban-slot empty&quot;>×</div>\'"><div class="ban-cross">✕</div>';
         if (step != null) html += '<span class="pro-bp-ban-slot-step">' + step + '</span>';
         html += '</div>';
       } else {
@@ -867,7 +918,7 @@ function renderProBPLineups() {
         const name = BP.getHeroName(heroId);
         const url = BP.getHeroAvatarUrl(heroId);
         html += '<div class="pro-bp-lineup-slot picked"><span class="pro-bp-lineup-slot-pos">' + slotStep + '</span>';
-        html += '<img class="pro-bp-lineup-slot-avatar" src="' + url + '" alt="' + name + '" onerror="this.style.display=\'none\'"><span class="pro-bp-lineup-slot-name">' + name + '</span></div>';
+        html += '<img class="pro-bp-lineup-slot-avatar" src="' + url + '" alt="' + name + '" loading="lazy" onerror="this.style.display=\'none\'"><span class="pro-bp-lineup-slot-name">' + name + '</span></div>';
       } else {
         html += '<div class="pro-bp-lineup-slot"><span class="pro-bp-lineup-slot-pos">' + slotStep + '</span><span class="pro-bp-lineup-slot-empty">待选择</span></div>';
       }
@@ -932,7 +983,13 @@ function proBPPrev() {
 }
 
 function proBPNext() {
-  if (proBPState && !proBPState.ended) onProBPHeroClick('__auto_skip__');
+  if (!proBPState || proBPState.ended) return;
+  proBPState.currentStep++;
+  if (proBPState.currentStep >= PRO_BP_STEPS.length) {
+    proBPState.ended = true;
+  }
+  updateProBPUI();
+  renderProBPGrid();
 }
 
 function proBPAuto() {

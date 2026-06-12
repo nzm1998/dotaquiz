@@ -20,9 +20,13 @@ const Team = {
 const TEAM_STATUS_LOADING_DELAY_MS = 250;
 const MATCH_CONCURRENCY = 4;
 const MATCH_TIMEOUT_MS = 20000;
-const MATCH_TARGET = 20;
-const WARD_GRID = 4;            // bucket ward (x,y) to nearest WARD_GRID-cell
-const WARD_TOP_N = 30;
+function getMatchTarget() {
+  const el = document.getElementById('teamMatchCount');
+  return el ? parseInt(el.value) || 20 : 20;
+}
+
+const MATCH_TARGET = 20; // fallback
+const WARD_GRID = 1;            // bucket ward (x,y) to nearest WARD_GRID-cell
 const SEARCH_DEBOUNCE_MS = 250;
 const TEAM_ROSTER_HIT_THRESHOLD = 3;  // min roster overlap to trust a side identification
 // OpenDota's obs_log / sen_log use Dota 2 world coordinates. 实测多战队 20 场
@@ -41,12 +45,14 @@ const PROGRESS_STATUS = 'teamProgressStatus';
 
 // ==================== INIT ====================
 async function initTeam() {
-  if (Team.initialized) return;
-  Team.initialized = true;
+  // 移除之前的旧状态
+  const oldProgress = document.getElementById('teamProgressCard');
+  if (oldProgress) oldProgress.style.display = 'none';
+  const oldResult = document.getElementById('teamResultCard');
+  if (oldResult) oldResult.style.display = 'none';
+  Team._lastWardSplit = null;
 
   setStatus(REPLAY_STATUS, '加载中...', 'loading');
-  document.getElementById('teamResultCard').style.display = 'none';
-  document.getElementById('teamProgressCard').style.display = 'none';
 
   // Load curated teams + ensure BP is loaded
   try {
@@ -57,6 +63,17 @@ async function initTeam() {
   } catch (e) {
     Team._curatedTeams = [];
     console.warn('Failed to load config/teams.json:', e);
+  }
+
+  // Load pre-known rosters
+  try {
+    const res = await fetch('config/rosters.json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rosterData = await res.json();
+    Team._rosters = rosterData.rosters || {};
+  } catch (e) {
+    Team._rosters = {};
+    console.warn('Failed to load config/rosters.json:', e);
   }
 
   // Wait for BP.loadHeroes() to be ready (it might already be loading from BP tab)
@@ -72,9 +89,13 @@ async function initTeam() {
   }
 
   renderCuratedChips();
-  bindSearchInput();
-  bindAnalyzeButton();
-  bindResize();
+  if (!document.getElementById('replay-screen')?.dataset.teamBound) {
+    var rs = document.getElementById('replay-screen');
+    if (rs) rs.dataset.teamBound = '1';
+    bindSearchInput();
+    bindAnalyzeButton();
+    bindResize();
+  }
   updateProgressLabels();
 
   setStatus(REPLAY_STATUS, '', null);
@@ -86,9 +107,10 @@ async function initTeam() {
 //   step3: 识别当前 5 选手  (was 加载比赛详情)
 //   step4/5: unchanged
 function updateProgressLabels() {
+  const t = getMatchTarget();
   const map = {
     step1: '获取最近比赛',
-    step2: '加载比赛详情',
+    step2: `拉取最近 ${t} 场比赛`,
     step3: '识别当前 5 选手',
   };
   for (const [id, text] of Object.entries(map)) {
@@ -255,6 +277,7 @@ function bindAnalyzeButton() {
   if (!btn) return;
   btn.addEventListener('click', () => {
     if (Team.busy) return;
+    updateProgressLabels();
     const pending = Team._pendingTeam;
     if (!pending || !pending.team_id) {
       setStatus(REPLAY_STATUS, '请先选择一支战队（点芯片或在搜索框里搜）', 'error');
@@ -320,7 +343,8 @@ async function startAnalysis(teamId, teamName) {
     markProgress('step2', 'running');
     const matches = [];
     const errors = [];
-    const total = Math.min(matchList.length, MATCH_TARGET);
+    const target = getMatchTarget();
+    const total = Math.min(matchList.length, target);
     let done = 0;
     await parallelMap(matchList.slice(0, total), MATCH_CONCURRENCY, async (entry) => {
       try {
@@ -386,6 +410,7 @@ async function startAnalysis(teamId, teamName) {
       buckets,
       matchCount: usable.length,
       teamName,
+      teamId: Team._rosterTeamId,
       matchStats,
       playerStats,
     });
@@ -660,6 +685,43 @@ function getHeroRoles(heroId, heroIdMap) {
 //       * hero with only role 3 → pos 3
 //       * hero with only role 5 (or roles={4,5} containing 5) → pos 5
 //       * remaining → pos 4
+
+// ==================== POSITION INFERENCE BY HERO ROLES ====================
+// 用 heroes_knowledge.json 的英雄角色数据推断位置，比 player_slot 或 lane_role 都准
+function assignPositionsByHeroRoles(players, heroIdMap) {
+  const assigned = new Map();
+  const remaining = new Set([1, 2, 3, 4, 5]);
+
+  const flex = players.filter(p => p.account_id && p.hero_id).map(p => {
+    const roles = getHeroRoles(p.hero_id, heroIdMap);
+    return { player: p, roles: roles && roles.length > 0 ? roles : [] };
+  });
+
+  // 第一轮：角色唯一的英雄直接分配
+  for (const item of flex) {
+    if (item.roles.length === 1 && remaining.has(item.roles[0])) {
+      assigned.set(item.player.account_id, item.roles[0]);
+      remaining.delete(item.roles[0]);
+    }
+  }
+
+  // 第二轮：角色限定较小的优先分配
+  const unassigned = flex.filter(item => !assigned.has(item.player.account_id));
+  unassigned.sort((a, b) => {
+    if (a.roles.length !== b.roles.length) return a.roles.length - b.roles.length;
+    return (a.player.player_slot || 0) - (b.player.player_slot || 0);
+  });
+
+  for (const item of unassigned) {
+    const candidates = item.roles.filter(r => remaining.has(r));
+    const pos = candidates.length > 0 ? candidates[0] : remaining.values().next().value;
+    assigned.set(item.player.account_id, pos);
+    remaining.delete(pos);
+  }
+
+  return assigned;
+}
+
 function assignPositionsForMatch(match, side, heroIdMap) {
   const our = ourPlayers(match, side);
   const assigned = new Map();  // account_id -> pos
@@ -800,11 +862,16 @@ function aggregatePlayerStats(matches, rosterSet, heroIdMap, proPlayersMap) {
     const side = identifyOurSide(m, rosterSet);
     if (!side) continue;
     const our = ourPlayers(m, side).slice();
-    our.sort((a, b) => (a.player_slot || 0) - (b.player_slot || 0));
     const didWin = (side === 'radiant') === !!m.radiant_win;
+
+    // 用英雄角色推断位置，而非 player_slot
+    const assigned = assignPositionsByHeroRoles(our, heroIdMap);
+
     for (let i = 0; i < our.length && i < 5; i++) {
       const p = our[i];
       if (!p.account_id) continue;
+      const pos = assigned.get(p.account_id);
+      if (!pos) continue;
       let stat = result.get(p.account_id);
       if (!stat) {
         stat = {
@@ -825,7 +892,7 @@ function aggregatePlayerStats(matches, rosterSet, heroIdMap, proPlayersMap) {
       stat.assists += p.assists || 0;
       if (typeof p.gold_per_min === 'number') { stat.gpmSum += p.gold_per_min; stat.gpmN++; }
       if (typeof p.xp_per_min === 'number') { stat.xpmSum += p.xp_per_min; stat.xpmN++; }
-      stat.positions.push(i + 1);
+      stat.positions.push(pos);
       if (p.hero_id) {
         const bpId = heroIdMap && heroIdMap.get(p.hero_id);
         if (bpId && window.BP.getHeroById(bpId)) {
@@ -894,11 +961,7 @@ function modeOrNull(arr) {
 }
 
 // ==================== WARD AGGREGATION ====================
-// Only observer wards (假眼) — the user explicitly does not want sentries.
-// Split by which side our team was on, so the "天辉时" and "夜魇时" warding
-// patterns can be shown separately (they differ a lot in pro Dota).
-// Returns { radMap, direMap, radWardsTotal, direWardsTotal } where each
-// map is { "x,y": { x, y, count } } bucketed by WARD_GRID.
+// 假眼(obs) + 真眼(sen) 全部放上去，不设 top-N 过滤，直接看全局密集度
 function aggregateWardsBySide(matches, rosterSet) {
   const radMap = {};
   const direMap = {};
@@ -907,7 +970,7 @@ function aggregateWardsBySide(matches, rosterSet) {
     if (!side) continue;
     const target = side === 'radiant' ? radMap : direMap;
     for (const p of ourPlayers(m, side)) {
-      collectWardLog(target, p.obs_log, 'obs');
+      collectWardLog(target, p.obs_log);
     }
   }
   const radWardsTotal = Object.values(radMap).reduce((s, e) => s + e.count, 0);
@@ -915,22 +978,22 @@ function aggregateWardsBySide(matches, rosterSet) {
   return { radMap, direMap, radWardsTotal, direWardsTotal };
 }
 
-function collectWardLog(map, log, kind) {
+function collectWardLog(map, log) {
   if (!Array.isArray(log)) return;
   const span = WARD_WORLD_MAX - WARD_WORLD_MIN;
   for (const w of log) {
-    // OpenDota obs_log/sen_log entries put x,y,z directly on the entry (not under
-    // a `pos` sub-object). Fall back to w.pos for older endpoint shapes.
     const x = (typeof w.x === 'number') ? w.x : (w.pos && typeof w.pos.x === 'number' ? w.pos.x : null);
     const y = (typeof w.y === 'number') ? w.y : (w.pos && typeof w.pos.y === 'number' ? w.pos.y : null);
     if (x === null || y === null) continue;
     if (x < WARD_WORLD_MIN || x > WARD_WORLD_MAX || y < WARD_WORLD_MIN || y > WARD_WORLD_MAX) continue;
-    // Normalize to 0-127 minimap grid, then bucket
+    // OpenDota 的 obs_log 使用 Dota 2 世界坐标。
+    // 世界坐标: x 向右增大 (左→右), y 向上增大 (底→顶)
+    // 图片坐标: x 向右增大, y 向下增大 (顶→底)
+    // 所以 y 需要翻转: ny = 127 - ny
     const nx = ((x - WARD_WORLD_MIN) / span) * 127;
     const ny = ((y - WARD_WORLD_MIN) / span) * 127;
-    const key = bucketKey(nx, ny);
-    if (!map[key]) map[key] = { x: bucketCenter(nx), y: bucketCenter(ny), count: 0 };
-    map[key][kind]++;
+    const key = bucketKey(nx, 127 - ny);
+    if (!map[key]) map[key] = { x: bucketCenter(nx), y: bucketCenter(127 - ny), count: 0 };
     map[key].count++;
   }
 }
@@ -946,7 +1009,7 @@ function bucketCenter(x) {
 }
 
 // ==================== RENDER ====================
-const POSITION_LABELS = { 1: '1号位 大哥', 2: '2号位 中单', 3: '3号位 劣单', 4: '4号位 游走', 5: '5号位 酱油' };
+const POSITION_LABELS = { 1: '1号位 Carry', 2: '2号位 中单', 3: '3号位 劣单', 4: '4号位 游走', 5: '5号位 酱油' };
 
 function fmtDuration(sec) {
   if (!sec || sec < 0) return '—';
@@ -956,17 +1019,19 @@ function fmtDuration(sec) {
 }
 
 const POSITION_LABELS_FULL = {
-  1: '1号位 · 大哥',
+  1: '1号位 · Carry',
   2: '2号位 · 中单',
   3: '3号位 · 劣单',
   4: '4号位 · 游走',
   5: '5号位 · 酱油',
 };
 
-function renderPositionSection(playerStat, pos) {
+function renderPositionSection(playerStat, pos, knownNames) {
   if (!playerStat) {
+    const knownName = '';
+    const nameHtml = knownName ? `<div class="team-player-name">${escapeHtml(knownName)}</div>` : '';
     return `<div class="team-players-section" data-position="${pos}">
-      <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>
+      <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>${nameHtml}
       <div class="team-player-empty">该位置无数据</div>
     </div>`;
   }
@@ -975,7 +1040,6 @@ function renderPositionSection(playerStat, pos) {
     : '—';
   const heroChips = Array.from(playerStat.heroStats.entries())
     .sort((a, b) => b[1].games - a[1].games)
-    .slice(0, 5)
     .map(([heroId, hs]) => {
       const name = window.BP.getHeroName(heroId) || heroId;
       const wr = hs.games > 0 ? ((hs.wins / hs.games) * 100).toFixed(0) : '—';
@@ -988,23 +1052,23 @@ function renderPositionSection(playerStat, pos) {
 
   // Team analysis section: just position + player + common heroes.
   // (Counter recommendations moved to a separate section.)
+  const knownName = (knownNames && knownNames.get(playerStat.accountId)) || '';
+  const nameHtml = knownName ? `<div class="team-player-name">${escapeHtml(knownName)}</div>` : '';
   return `<div class="team-players-section" data-position="${pos}">
     <div class="team-players-section-header">${POSITION_LABELS_FULL[pos]}</div>
-    <div class="team-player-header">
-      <span class="team-player-name">${escapeHtml(playerStat.name)}</span>
-      <span class="team-player-stats">
-        <span>${playerStat.games}场</span>
-        <span>胜率 ${winRate}%</span>
-        <span>KDA ${playerStat.avgKda.toFixed(2)}</span>
-        <span>GPM ${playerStat.gpm.toFixed(0)}</span>
-        <span>XPM ${playerStat.xpm.toFixed(0)}</span>
-      </span>
+    ${nameHtml}
+    <div class="team-player-stats">
+      <span>${playerStat.games}场</span>
+      <span>胜率 ${winRate}%</span>
+      <span>KDA ${playerStat.avgKda.toFixed(2)}</span>
+      <span>GPM ${playerStat.gpm.toFixed(0)}</span>
+      <span>XPM ${playerStat.xpm.toFixed(0)}</span>
     </div>
     <div class="team-player-heroes">${heroChips || '<div class="team-player-empty">无招牌英雄</div>'}</div>
   </div>`;
 }
 
-function renderPositionSections(playerStats) {
+function renderPositionSections(playerStats, knownNames) {
   if (!playerStats || playerStats.size === 0) {
     return '<div class="team-players-empty">无选手数据</div>';
   }
@@ -1012,11 +1076,11 @@ function renderPositionSections(playerStats) {
   for (const pos of [1, 2, 3, 4, 5]) {
     const candidates = Array.from(playerStats.values()).filter(s => s.mainPos === pos);
     if (candidates.length === 0) {
-      html.push(renderPositionSection(null, pos));
+      html.push(renderPositionSection(null, pos, knownNames));
       continue;
     }
     candidates.sort((a, b) => b.games - a.games);
-    html.push(renderPositionSection(candidates[0], pos));
+    html.push(renderPositionSection(candidates[0], pos, knownNames));
   }
   return html.join('');
 }
@@ -1087,9 +1151,19 @@ function renderCounterRecommendations(buckets) {
   </div>`;
 }
 
-function renderCounters({ buckets, matchCount, teamName, matchStats, playerStats }) {
+function renderCounters({ buckets, matchCount, teamName, teamId, matchStats, playerStats }) {
   const card = document.getElementById('teamCountersCard');
   if (!card) return;
+
+  const rosterEntry = Team._rosters && Team._rosters[teamId];
+  const knownNames = new Map();
+  if (rosterEntry && rosterEntry.account_ids && rosterEntry.players) {
+    for (let i = 0; i < rosterEntry.account_ids.length; i++) {
+      const aid = rosterEntry.account_ids[i];
+      const pn = rosterEntry.players[i];
+      if (aid && pn) knownNames.set(aid, pn);
+    }
+  }
 
   let html = `<div class="team-result-title">📊 战队分析 · ${escapeHtml(teamName)}</div>`;
   html += `<div class="team-result-subtitle">基于最近 ${matchCount} 场可识别比赛</div>`;
@@ -1098,7 +1172,7 @@ function renderCounters({ buckets, matchCount, teamName, matchStats, playerStats
 
   // 战队分析板块: 5 名选手按位置 + 招牌英雄
   html += `<div class="team-section-subtitle">👥 5 名选手（按位置）</div>`;
-  html += renderPositionSections(playerStats);
+  html += renderPositionSections(playerStats, knownNames);
 
   // 克制推荐板块: 每个位置 3 个
   html += renderCounterRecommendations(buckets);
@@ -1206,10 +1280,7 @@ function renderWardHeatmaps({ radMap, direMap, radWardsTotal, direWardsTotal }) 
 }
 
 function drawWardmapOnto(wrap, canvas, map) {
-  const entries = Object.values(map)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, WARD_TOP_N);
-  const max = entries.reduce((m, e) => Math.max(m, e.count), 0) || 1;
+  const entries = Object.values(map);
 
   const rect = wrap.getBoundingClientRect();
   const cssW = Math.max(rect.width, 200);
@@ -1238,11 +1309,10 @@ function drawWardmapOnto(wrap, canvas, map) {
   for (const e of entries) {
     const px = (X_MIN + (e.x / 128) * (X_MAX - X_MIN)) * cssW;
     const py = (Y_MIN + (e.y / 128) * (Y_MAX - Y_MIN)) * cssH;
-    const r = 3 + Math.min(12, e.count * 1.0);
-    const alpha = 0.30 + 0.55 * (e.count / max);
+    // 所有眼位同样大小，不管频次
     ctx.beginPath();
-    ctx.arc(px, py, r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(96, 165, 250, ${alpha})`;
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 60, 60, 0.5)';
     ctx.fill();
   }
 }

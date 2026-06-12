@@ -1,28 +1,11 @@
 // ==================== SHARED STATE & ROUTING ====================
+// navigate is defined in index.html inline script — it handles screen switching
+// and module initialization. app.js only provides the initial boot on page load.
 let soundMuted = false;
-let bgmMuted = false;
-let bgmInitialized = false;
 let audioCtx = null;
 
 // Audio Controls
-const bgmBtn = document.getElementById('bgmBtn');
 const soundBtn = document.getElementById('soundBtn');
-
-const bgm = new Audio();
-bgm.src = 'assets/dota2_reborn.mp3';
-bgm.loop = true;
-bgm.volume = 0.25;
-
-bgmBtn.addEventListener('click', () => {
-  if (!bgmInitialized) {
-    bgm.play().catch(() => {});
-    bgmInitialized = true;
-  }
-  bgmMuted = !bgmMuted;
-  bgm.muted = bgmMuted;
-  bgmBtn.textContent = bgmMuted ? '🔇' : '🔊';
-  bgmBtn.classList.toggle('muted', bgmMuted);
-});
 
 soundBtn.addEventListener('click', () => {
   soundMuted = !soundMuted;
@@ -30,60 +13,37 @@ soundBtn.addEventListener('click', () => {
   soundBtn.classList.toggle('muted', soundMuted);
 });
 
-document.addEventListener('click', () => {
-  if (!bgmInitialized) {
-    bgm.play().catch(() => {});
-    bgmInitialized = true;
-  }
-}, { once: true });
-
-// Routing
-let quizInitialized = false;
-
-function navigate(route) {
-  window.location.hash = route;
-}
-
-function handleRoute() {
-  const hash = window.location.hash.replace('#', '') || 'home';
-  const homeScreen = document.getElementById('home-screen');
-  const quizScreen = document.getElementById('quiz-screen');
-  const bpScreen = document.getElementById('bp-screen');
-  const replayScreen = document.getElementById('replay-screen');
-  const navQuiz = document.getElementById('nav-quiz');
-  const navBp = document.getElementById('nav-bp');
-  const navReplay = document.getElementById('nav-replay');
-
-  homeScreen.style.display = 'none';
-  quizScreen.style.display = 'none';
-  bpScreen.style.display = 'none';
-  replayScreen.style.display = 'none';
-  navQuiz.classList.remove('active');
-  navBp.classList.remove('active');
-  if (navReplay) navReplay.classList.remove('active');
-
-  if (hash === 'quiz') {
-    quizScreen.style.display = 'block';
-    navQuiz.classList.add('active');
-    if (!quizInitialized) {
-      quizInitialized = true;
-      window.initQuiz && window.initQuiz();
+// 汉堡菜单切换
+const hamburgerBtn = document.getElementById('navHamburger');
+const navLinks = document.querySelector('.nav-links');
+if (hamburgerBtn && navLinks) {
+  hamburgerBtn.addEventListener('click', () => {
+    const isOpen = navLinks.classList.toggle('open');
+    hamburgerBtn.setAttribute('aria-expanded', isOpen);
+  });
+  // 点击导航链接后关闭菜单
+  navLinks.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      navLinks.classList.remove('open');
+      hamburgerBtn.setAttribute('aria-expanded', 'false');
+    });
+  });
+  // 点击外部关闭菜单
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav') && navLinks.classList.contains('open')) {
+      navLinks.classList.remove('open');
+      hamburgerBtn.setAttribute('aria-expanded', 'false');
     }
-  } else if (hash === 'bp') {
-    bpScreen.style.display = 'block';
-    navBp.classList.add('active');
-    window.initBP && window.initBP();
-  } else if (hash === 'replay') {
-    replayScreen.style.display = 'block';
-    if (navReplay) navReplay.classList.add('active');
-    window.initTeam && window.initTeam();
-  } else {
-    homeScreen.style.display = 'block';
-  }
+  });
 }
 
-window.addEventListener('hashchange', handleRoute);
-window.addEventListener('load', handleRoute);
+// Boot — if URL has a hash, navigate to it
+window.addEventListener('load', function () {
+  var hash = (window.location.hash || '').replace('#', '');
+  if (hash && ['quiz', 'bp', 'replay'].indexOf(hash) >= 0 && typeof window.navigate === 'function') {
+    window.navigate(hash);
+  }
+});
 
 // Audio helpers
 async function initAudio() {
@@ -131,19 +91,8 @@ async function playWrongSound() {
   } catch (e) {}
 }
 
-// Firebase (shared)
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const answersCollection = db.collection('answers');
-const statsCollection = db.collection('question_stats');
-const commentsCollection = db.collection('comments');
-const replaysCollection = db.collection('replays');
-
 // Export shared functions
 window.navigate = navigate;
 window.handleRoute = handleRoute;
 window.playCorrectSound = playCorrectSound;
 window.playWrongSound = playWrongSound;
-window.replaysCollection = replaysCollection;
-window.firebase = firebase;
-window.db = db;

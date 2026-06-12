@@ -1,0 +1,92 @@
+{
+  "version": "1.0.0",
+  "source": "OpenDota API + Liquipedia (2026-06)",
+  "rosters": {
+    "15": {
+      "team": "LGD Gaming",
+      "note": "旧 team_id=15 已无活跃成员，当前 LGD 使用新 id=10150538",
+      "players": ["Wisper", "TaiLung", "Yuma", "Thiolicor", "KingJungles"],
+      "account_ids": [318712954, 106068597, 280705075, 267918525, 292921272]
+    },
+    "2163": {
+      "team": "Team Liquid",
+      "players": ["m1CKe", "Nisha", "Ace", "Boxi", "tOfu"],
+      "account_ids": [155494766, 211580647, 900804004, 1015269067, 16497807]
+    },
+    "9247354": {
+      "team": "Team Falcons",
+      "players": ["skiter", "Malr1ne", "ATF", "Cr1t-", "Sneyking"],
+      "account_ids": [227271783, 385111038, 143526212, 25907144, 10366616]
+    },
+    "8255888": {
+      "team": "BetBoom Team",
+      "players": ["Kiritych~", "gpk~", "MieRo", "Kataomi`", "Save-"],
+      "account_ids": [239346507, 480382772, 367476335, 154643311, 129958132]
+    },
+    "9823272": {
+      "team": "Team Yandex",
+      "players": ["CHIRA_JUNIOR", "医者watson`", "Maladych", "Saksa", "DM"],
+      "account_ids": [312436974, 171262902, 93817671, 103735745, 56351509]
+    },
+    "9467224": {
+      "team": "Aurora Gaming",
+      "players": ["Mikoto", "Nightfall", "kaori", "Ws`", "Mira"],
+      "account_ids": [89230864, 187970731, 323542581, 280577598, 168652995]
+    },
+    "7119388": {
+      "team": "Team Spirit",
+      "players": ["Yatoro", "Larl", "Collapse", "rue", "not_me"],
+      "account_ids": [18670173, 124741614, 109512287, 302419760, 986655481]
+    },
+    "8291895": {
+      "team": "Tundra Esports",
+      "note": "OpenDota 仅 2 名活跃成员，队伍可能换血中",
+      "players": ["Topson", "RAMZES666", "", "", ""],
+      "account_ids": [94086400, 106877714]
+    },
+    "2586976": {
+      "team": "OG",
+      "players": ["Yopaj-", "skem", "Ceb", "TIMS", "Natsumi"],
+      "account_ids": [87733343, 334399976, 144519895, 99983418, 501992370]
+    },
+    "10081680": {
+      "team": "GLYPH",
+      "players": ["Emo", "JACKBOYS", "zeal", "Jhocam", "NARMAN"],
+      "account_ids": [876852147, 853466068, 104957477, 879328521, 990088905]
+    },
+    "8261500": {
+      "team": "Xtreme Gaming",
+      "note": "6 名活跃成员，含轮换",
+      "players": ["Ame", "NothingToSay", "Xxs", "Pyw", "xNova"],
+      "account_ids": [177491398, 642419235, 867321144, 901759086, 343223299]
+    },
+    "726228": {
+      "team": "Vici Gaming",
+      "players": ["shiro", "Xm", "Bach", "XinQ", "y`"],
+      "account_ids": [217152284, 343457653, 102581822, 318866413, 334202651]
+    },
+    "9572001": {
+      "team": "PARIVISION",
+      "players": ["Satanic", "No[o]ne-", "Noticed", "9Class", "Dukalis"],
+      "account_ids": [930069975, 117485995, 195108598, 449896202, 129663498]
+    },
+    "36": {
+      "team": "Natus Vincere",
+      "note": "含 2 名替补",
+      "players": ["gotthejuice", "sanctity-", "Niku", "pma", "Riddys"],
+      "account_ids": [347967316, 180643151, 234891067, 304229622, 1020245313]
+    },
+    "7554697": {
+      "team": "Nigma Galaxy",
+      "note": "OpenDota 仅 3 名活跃成员",
+      "players": ["Miracle-", "rmN-", "kky"],
+      "account_ids": [87278757, 102987977, 129790917]
+    },
+    "1883502": {
+      "team": "Virtus.pro",
+      "note": "旧 id=1883502 已无活跃成员，当前 VP 用新 id=9895392",
+      "players": ["Hellscream", "Timado", "Saberlight", "Abed", "Fly"],
+      "account_ids": [131178998, 74833288, 809507168, 110267445, 934216852]
+    }
+  }
+}

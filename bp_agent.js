@@ -191,7 +191,8 @@ const BP = {
     if (aIdx === undefined || bIdx === undefined) return 0;
     const ab = this.synergyMatrix.data[aIdx][bIdx];
     const ba = this.synergyMatrix.data[bIdx][aIdx];
-    return (ab + ba) / 2;
+    // 矩阵是对称的，只存一次，取有值的那一边
+    return ab || ba;
   },
 
   // ==================== POSITION-AWARE MULTIPLIERS ====================

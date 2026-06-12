@@ -7,11 +7,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Oxanium:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js"></script>
+  <link rel="stylesheet" href="style.css?v4">
+  <script>
+    // 版本号，用于缓存刷新
+    window.SITE_VERSION = '20260612';
+  </script>
 </head>
 <body>
   <script>
@@ -20,26 +20,49 @@
     // for deferred scripts and the `load` event to fire. app.js#handleRoute
     // will re-apply the same logic on `load` / `hashchange`.
     (function () {
-      function applyRoute() {
+      // 唯一的 navigate 函数：切换屏幕 + 更新导航高亮 + 初始化模块
+      window.navigate = function (route) {
+        if (!route) return;
+        var valid = ['home', 'quiz', 'bp', 'replay'];
+        if (valid.indexOf(route) < 0) return;
+        // 滚回顶部，避免在长页面底部切页时内容跑出可视区
+        window.scrollTo(0, 0);
+        // 切换屏幕
+        valid.forEach(function (s) {
+          var el = document.getElementById(s + '-screen');
+          if (el) el.style.display = (s === route) ? 'block' : 'none';
+        });
+        // 更新导航高亮
+        ['quiz', 'bp', 'replay'].forEach(function (k) {
+          var n = document.getElementById('nav-' + k);
+          if (n) n.classList.toggle('active', k === route);
+        });
+        // 更新 hash
+        window.location.hash = route;
+        // 延迟一帧初始化模块，确保 DOM 显示后再加载
+        setTimeout(function () {
+          if (route === 'quiz') {
+            window.initQuiz && window.initQuiz();
+          } else if (route === 'bp') {
+            window.initBP && window.initBP();
+          } else if (route === 'replay') {
+            window.initTeam && window.initTeam();
+          }
+        }, 50);
+      };
+
+      // 页面加载时根据 hash 切到对应页面
+      function bootRoute() {
         try {
           var hash = (window.location.hash || '').replace('#', '');
           var valid = ['home', 'quiz', 'bp', 'replay'];
-          var route = valid.indexOf(hash) >= 0 ? hash : 'home';
-          ['home', 'quiz', 'bp', 'replay'].forEach(function (s) {
-            var el = document.getElementById(s + '-screen');
-            if (el) el.style.display = (s === route) ? 'block' : 'none';
-          });
-          var navMap = { quiz: 'nav-quiz', bp: 'nav-bp', replay: 'nav-replay' };
-          Object.keys(navMap).forEach(function (k) {
-            var n = document.getElementById(navMap[k]);
-            if (n) n.classList.toggle('active', k === route);
-          });
-        } catch (e) { /* fail silently — app.js will recover */ }
+          if (valid.indexOf(hash) >= 0) window.navigate(hash);
+        } catch (e) {}
       }
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applyRoute, { once: true });
+        document.addEventListener('DOMContentLoaded', bootRoute, { once: true });
       } else {
-        applyRoute();
+        bootRoute();
       }
     })();
   </script>
@@ -55,6 +78,9 @@
       <span class="nav-link" onclick="navigate('bp')" id="nav-bp">BP建议</span>
       <span class="nav-link" onclick="navigate('replay')" id="nav-replay">战队分析</span>
     </div>
+    <button class="nav-hamburger" id="navHamburger" aria-label="菜单" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
     <div class="nav-cta"></div>
   </nav>
 
@@ -128,7 +154,7 @@
       <div class="footer-inner">
         <div class="footer-brand">
           <div class="footer-logo-mark">D2</div>
-          <span class="footer-text">© 2025 Dota2 Tools. 非官方项目，仅供娱乐。</span>
+          <span class="footer-text">© <span id="copyrightYear">2025</span> Dota2 Tools. 非官方项目，仅供娱乐。</span>
         </div>
       </div>
     </footer>
@@ -180,17 +206,6 @@
           <option value="4">4号位（游走）</option>
           <option value="5">5号位（酱油）</option>
         </select>
-      </div>
-
-      <div class="filter-section filter-section--secondary">
-        <label class="toggle-switch" for="positionFilterToggle">
-          <span class="toggle-label">按位置推荐</span>
-          <input type="checkbox" id="positionFilterToggle" checked>
-          <span class="toggle-track" aria-hidden="true">
-            <span class="toggle-thumb"></span>
-          </span>
-        </label>
-        <span class="filter-hint" id="positionFilterHint">仅从对应位置的英雄中推荐</span>
       </div>
 
       <div class="bp-advice-card bp-advice-card--brief" id="resultsCard">
@@ -286,6 +301,16 @@
           <div class="team-search-results" id="teamSearchResults" style="display:none"></div>
         </div>
 
+        <div class="team-options-row">
+          <label class="filter-label" for="teamMatchCount">📊 分析最近</label>
+          <select id="teamMatchCount" class="team-match-count-select">
+            <option value="5">5 场</option>
+            <option value="10">10 场</option>
+            <option value="15">15 场</option>
+            <option value="20" selected>20 场</option>
+          </select>
+        </div>
+
         <button class="calculate-btn" id="teamAnalyzeBtn">🔍 开始分析</button>
         <div class="replay-status" id="teamStatus"></div>
       </div>
@@ -294,7 +319,7 @@
         <div class="replay-result-title">⏳ 分析进度</div>
         <ul class="team-progress-list">
           <li class="team-progress-step" id="step1"><span class="team-progress-bullet"></span><span class="team-progress-label">加载战队信息</span><span class="team-progress-detail"></span></li>
-          <li class="team-progress-step" id="step2"><span class="team-progress-bullet"></span><span class="team-progress-label">拉取最近 20 场比赛</span><span class="team-progress-detail"></span></li>
+          <li class="team-progress-step" id="step2"><span class="team-progress-bullet"></span><span class="team-progress-label">拉取最近比赛</span><span class="team-progress-detail"></span></li>
           <li class="team-progress-step" id="step3"><span class="team-progress-bullet"></span><span class="team-progress-label">加载比赛详情</span><span class="team-progress-detail"></span></li>
           <li class="team-progress-step" id="step4"><span class="team-progress-bullet"></span><span class="team-progress-label">解析位置 + 克制</span><span class="team-progress-detail"></span></li>
           <li class="team-progress-step" id="step5"><span class="team-progress-bullet"></span><span class="team-progress-label">汇总眼位</span><span class="team-progress-detail"></span></li>
@@ -308,19 +333,19 @@
 
           <div class="team-wardmap-card" id="teamWardmapCard">
             <div class="team-wardmap-title">🗺️ 高频眼位热力图</div>
-            <div class="team-wardmap-subtitle">基于该队 5 名选手最近 20 场可识别比赛的<strong>假眼</strong>分布</div>
+            <div class="team-wardmap-subtitle">假眼 + 真眼全部显示，密集区域自然显现（不设 Top-N 过滤）</div>
             <div class="team-wardmap-sides">
               <div class="team-wardmap-side">
                 <div class="team-wardmap-side-title">🟢 天辉方眼位 <span class="team-wardmap-side-count" id="teamWardmapRadCount">—</span></div>
                 <div class="team-wardmap-wrap" data-side="radiant">
-                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map">
+                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map" loading="lazy">
                   <canvas class="team-wardmap-canvas"></canvas>
                 </div>
               </div>
               <div class="team-wardmap-side">
                 <div class="team-wardmap-side-title">🔴 夜魇方眼位 <span class="team-wardmap-side-count" id="teamWardmapDireCount">—</span></div>
                 <div class="team-wardmap-wrap" data-side="dire">
-                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map">
+                  <img class="team-wardmap-bg" src="assets/dota_map_7.40.jpg" alt="Dota2 7.40 map" loading="lazy">
                   <canvas class="team-wardmap-canvas"></canvas>
                 </div>
               </div>
@@ -345,14 +370,16 @@
   <!-- Audio Controls -->
   <div class="audio-controls">
     <button class="audio-btn" id="soundBtn" title="音效开关">🔊</button>
-    <button class="audio-btn" id="bgmBtn" title="BGM开关">🔊</button>
   </div>
 
-  <script src="bp_agent.js"></script>
-  <script src="scripts/util.js"></script>
-  <script src="scripts/app.js"></script>
-  <script src="scripts/quiz.js" defer></script>
-  <script src="scripts/bp.js" defer></script>
-  <script src="scripts/team.js" defer></script>
+  <script src="bp_agent.js?v=20260612"></script>
+  <script src="scripts/util.js?v=20260612"></script>
+  <script src="scripts/app.js?v=20260612"></script>
+  <script src="scripts/quiz.js?v=20260612" defer></script>
+  <script src="scripts/bp.js?v=20260612" defer></script>
+  <script src="scripts/team.js?v=20260612" defer></script>
+  <script>
+    document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
