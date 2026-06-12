@@ -32,6 +32,11 @@
         lastNavigatedRoute = route;
         // 滚回顶部，避免在长页面底部切页时内容跑出可视区
         window.scrollTo(0, 0);
+        // 也重置首页内部滚动 + 恢复导航链接
+        var hs = document.getElementById('home-screen');
+        if (hs) { hs.scrollTop = 0; }
+        var navEl = document.querySelector('.nav');
+        if (navEl) navEl.classList.remove('scrolled');
         // 切换屏幕
         valid.forEach(function (s) {
           var el = document.getElementById(s + '-screen');
@@ -74,6 +79,21 @@
       // Browser back/forward + manual URL edits change the hash without going
       // through navigate(). Wire it up so the screen actually updates.
       window.addEventListener('hashchange', bootRoute);
+
+      // 首页滚动时隐藏导航链接（Chromium fixed 点击穿透绕行方案）
+      function setupHomeScroll() {
+        var homeEl = document.getElementById('home-screen');
+        var navEl = document.querySelector('.nav');
+        if (!homeEl || !navEl) return;
+        homeEl.addEventListener('scroll', function () {
+          navEl.classList.toggle('scrolled', this.scrollTop > 60);
+        });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupHomeScroll, { once: true });
+      } else {
+        setupHomeScroll();
+      }
     })();
   </script>
 

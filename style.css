@@ -200,6 +200,13 @@ body::before {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+}
+.nav.scrolled .nav-links {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(-8px);
 }
 
 .nav-link {
@@ -602,7 +609,7 @@ body::before {
  * clicks past the position: fixed nav/audio buttons and into <body>, even
  * though they render on top — see PR notes for the repro.
  */
-#home-screen { display: block; }
+#home-screen { display: block; height: 100vh; overflow-y: auto; }
 #quiz-screen { display: none; height: 100vh; overflow-y: auto; }
 #bp-screen { display: none; height: 100vh; overflow-y: auto; padding-top: 64px; }
 #replay-screen { display: none; height: 100vh; overflow-y: auto; }
